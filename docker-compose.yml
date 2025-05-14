@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/automanager
+      - JWT_SECRET_KEY=dev-jwt-secret-key
+    develop:
+      watch:
+        - path: ./backend
+          action: sync
+          target: /app
+        - path: ./backend/requirements.txt
+          action: rebuild
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - automanager_network
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    command: flask run --host=0.0.0.0
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000
+    develop:
+      watch:
+        - path: ./frontend/src
+          action: sync
+          target: /app/src
+        - path: ./frontend/package.json
+          action: rebuild
+    depends_on:
+      - backend
+    networks:
+      - automanager_network
+    restart: always
+    command: npm start
+
+  db:
+    image: postgres:13
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=automanager
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - automanager_network
+    restart: always
+
+networks:
+  automanager_network:
+    driver: bridge
+
+volumes:
+  postgres_data: 

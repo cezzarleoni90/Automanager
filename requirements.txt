@@ -1,0 +1,22 @@
+# Backend Dependencies
+Flask==2.3.3
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.0.5
+Flask-CORS==4.0.0
+Flask-JWT-Extended==4.5.3
+SQLAlchemy==2.0.23
+python-dotenv==1.0.0
+Werkzeug==2.3.7
+marshmallow==3.20.1
+pytest==7.4.3
+black==23.11.0
+flake8==6.1.0
+python-dateutil==2.8.2
+pandas==2.1.3
+numpy==1.26.2
+scikit-learn==1.3.2
+transformers==4.35.2
+torch==2.1.1
+nltk==3.8.1
+xlsxwriter==3.1.9
+cryptography==41.0.7 

@@ -1,0 +1,4 @@
+AutoManager v1.0
+Fecha de backup: 2025-05-14 10:19:14.000774
+Estado: Clientes y Vehículos funcionando
+Problemas conocidos: Gestión de repuestos en servicios
