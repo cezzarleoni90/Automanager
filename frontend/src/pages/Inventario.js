@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Container,
   Typography,
@@ -39,6 +39,8 @@ import {
   Search as SearchIcon,
   Warning as WarningIcon,
   Category as CategoryIcon,
+  QrCodeScanner as ScannerIcon,
+  Autorenew as AutoGenerateIcon,
 } from '@mui/icons-material';
 
 function Inventario() {
@@ -65,7 +67,7 @@ function Inventario() {
   const [movimientoActual, setMovimientoActual] = useState({
     tipo: 'entrada',
     cantidad: 1,
-    motivo: '',
+    notas: '',
   });
 
   // Estado para categorías
@@ -82,9 +84,102 @@ function Inventario() {
   const [openCategoriasDialog, setOpenCategoriasDialog] = useState(false);
   const [nuevaCategoria, setNuevaCategoria] = useState('');
 
+  // Estados para escáner (corregido con useRef)
+  const [openScannerDialog, setOpenScannerDialog] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+
   useEffect(() => {
     cargarRepuestos();
   }, []);
+
+  // Función para generar código automáticamente
+  const handleGenerarCodigo = async () => {
+    try {
+      // Generar código basado en timestamp y categoría
+      const timestamp = Date.now().toString().slice(-6);
+      const categoria = repuestoActual.categoria || 'GEN';
+      const prefijo = categoria.substring(0, 3).toUpperCase();
+      const codigo = `${prefijo}${timestamp}`;
+      
+      setRepuestoActual(prev => ({
+        ...prev,
+        codigo: codigo
+      }));
+      setSuccess('Código generado automáticamente');
+    } catch (error) {
+      setError('Error al generar código');
+    }
+  };
+
+  // Funciones para escáner
+  const startScanner = async () => {
+    setIsScanning(true);
+    setOpenScannerDialog(true);
+    
+    try {
+      // Importar Quagga dinámicamente
+      const Quagga = (await import('quagga')).default;
+      
+      // Configurar el escáner
+      Quagga.init({
+        inputStream: {
+          name: "Live",
+          type: "LiveStream",
+          target: videoRef.current,
+          constraints: {
+            width: 640,
+            height: 480,
+            facingMode: "environment" // Cámara trasera
+          }
+        },
+        locator: {
+          patchSize: "medium",
+          halfSample: true
+        },
+        numOfWorkers: 2,
+        decoder: {
+          readers: ["code_128_reader", "ean_reader", "ean_8_reader", "code_39_reader"]
+        },
+        locate: true
+      }, (err) => {
+        if (err) {
+          console.error(err);
+          setError('Error al inicializar el escáner');
+          setIsScanning(false);
+          return;
+        }
+        Quagga.start();
+      });
+
+      // Escuchar detecciones
+      Quagga.onDetected((result) => {
+        const code = result.codeResult.code;
+        setRepuestoActual(prev => ({
+          ...prev,
+          codigo: code
+        }));
+        setSuccess(`Código escaneado: ${code}`);
+        stopScanner();
+      });
+
+    } catch (error) {
+      setError('Error al cargar el escáner. Verifica que la librería esté instalada.');
+      setIsScanning(false);
+    }
+  };
+
+  const stopScanner = async () => {
+    try {
+      const Quagga = (await import('quagga')).default;
+      Quagga.stop();
+    } catch (error) {
+      console.error('Error stopping scanner:', error);
+    }
+    setIsScanning(false);
+    setOpenScannerDialog(false);
+  };
 
   const cargarRepuestos = async () => {
     try {
@@ -123,7 +218,7 @@ function Inventario() {
   };
 
   const handleEliminarCategoria = (categoria) => {
-    if (categorias.length > 1) { // No permitir eliminar la última categoría
+    if (categorias.length > 1) {
       setCategorias(categorias.filter(c => c !== categoria));
       setSuccess('Categoría eliminada exitosamente');
     }
@@ -162,7 +257,7 @@ function Inventario() {
     setMovimientoActual({
       tipo: 'entrada',
       cantidad: 1,
-      motivo: '',
+      notas: '',
     });
     setOpenMovimientoDialog(true);
   };
@@ -412,15 +507,33 @@ function Inventario() {
         <DialogContent>
           <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
             <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Código"
-                  name="codigo"
-                  value={repuestoActual.codigo}
-                  onChange={handleInputChange}
-                  required
-                />
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <TextField
+                    fullWidth
+                    label="Código"
+                    name="codigo"
+                    value={repuestoActual.codigo}
+                    onChange={handleInputChange}
+                    required
+                  />
+                  <Tooltip title="Generar código automático">
+                    <IconButton 
+                      onClick={handleGenerarCodigo}
+                      sx={{ bgcolor: '#e8f5e9' }}
+                    >
+                      <AutoGenerateIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Escanear código de barras">
+                    <IconButton 
+                      onClick={startScanner}
+                      sx={{ bgcolor: '#e3f2fd' }}
+                    >
+                      <ScannerIcon />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
@@ -431,6 +544,24 @@ function Inventario() {
                   onChange={handleInputChange}
                   required
                 />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Categoría</InputLabel>
+                  <Select
+                    name="categoria"
+                    value={repuestoActual.categoria}
+                    onChange={handleInputChange}
+                    label="Categoría"
+                    required
+                  >
+                    {categorias.map((categoria) => (
+                      <MenuItem key={categoria} value={categoria}>
+                        {categoria}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Grid>
               <Grid item xs={12}>
                 <TextField
@@ -506,24 +637,6 @@ function Inventario() {
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Categoría</InputLabel>
-                  <Select
-                    name="categoria"
-                    value={repuestoActual.categoria}
-                    onChange={handleInputChange}
-                    label="Categoría"
-                    required
-                  >
-                    {categorias.map((categoria) => (
-                      <MenuItem key={categoria} value={categoria}>
-                        {categoria}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   label="Ubicación"
@@ -594,6 +707,59 @@ function Inventario() {
         </DialogActions>
       </Dialog>
 
+      {/* Diálogo para escáner de código de barras */}
+      <Dialog 
+        open={openScannerDialog} 
+        onClose={stopScanner}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <ScannerIcon />
+            Escáner de Código de Barras
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ textAlign: 'center', py: 2 }}>
+            {isScanning ? (
+              <Box>
+                <Typography variant="body1" sx={{ mb: 2 }}>
+                  Enfoca el código de barras en el área de la cámara
+                </Typography>
+                <Box 
+                  sx={{ 
+                    width: '100%', 
+                    height: 300,
+                    border: '2px solid #1976d2',
+                    borderRadius: 1,
+                    overflow: 'hidden'
+                  }}
+                >
+                  <video 
+                    ref={videoRef}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                </Box>
+                <canvas 
+                  ref={canvasRef}
+                  style={{ display: 'none' }}
+                />
+              </Box>
+            ) : (
+              <Typography variant="body1">
+                Preparando escáner...
+              </Typography>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={stopScanner} color="primary">
+            Cancelar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Diálogo para registrar movimiento */}
       <Dialog open={openMovimientoDialog} onClose={handleCloseMovimientoDialog}>
         <DialogTitle>Registrar Movimiento</DialogTitle>
@@ -628,9 +794,9 @@ function Inventario() {
               <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="Motivo"
-                  name="motivo"
-                  value={movimientoActual.motivo}
+                  label="Notas"
+                  name="notas"
+                  value={movimientoActual.notas}
                   onChange={handleMovimientoInputChange}
                   multiline
                   rows={2}

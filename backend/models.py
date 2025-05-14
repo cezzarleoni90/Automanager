@@ -425,8 +425,8 @@ class Repuesto(db.Model):
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relaciones
-    movimientos = db.relationship('MovimientoInventario', back_populates='repuesto')
+    # ✅ CORREGIR RELACIONES
+    movimientos = db.relationship('MovimientoInventario', back_populates='repuesto', cascade='all, delete-orphan')
     
     __table_args__ = (
         db.UniqueConstraint('codigo', name='uq_repuesto_codigo'),
@@ -482,23 +482,26 @@ class MovimientoInventario(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     repuesto_id = db.Column(db.Integer, db.ForeignKey('repuesto.id'), nullable=False)
-    tipo = db.Column(db.String(20), nullable=False)  # entrada/salida
+    tipo = db.Column(db.String(20), nullable=False)  # ✅ Cambiar de 10 a 20
     cantidad = db.Column(db.Integer, nullable=False)
-    fecha = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'))
-    servicio_id = db.Column(db.Integer, db.ForeignKey('servicio.id'))
-    notas = db.Column(db.Text)
+    notas = db.Column(db.Text)  # ✅ Cambiar de 'motivo' a 'notas'
+    fecha = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Claves foráneas
+    servicio_id = db.Column(db.Integer, db.ForeignKey('servicio.id'), nullable=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=True)
     
     # Relaciones
     repuesto = db.relationship('Repuesto', back_populates='movimientos')
-    usuario = db.relationship('Usuario', backref='movimientos_inventario')
     servicio = db.relationship('Servicio', back_populates='movimientos_inventario')
+    usuario = db.relationship('Usuario', backref='movimientos_inventario')
 
     def to_dict(self):
         return {
             'id': self.id,
             'tipo': self.tipo,
             'cantidad': self.cantidad,
+            'notas': self.notas,  # ✅ Cambiar de 'motivo' a 'notas'
             'fecha': self.fecha.isoformat(),
             'repuesto': {
                 'id': self.repuesto.id,
@@ -507,10 +510,9 @@ class MovimientoInventario(db.Model):
             },
             'servicio': {
                 'id': self.servicio.id,
-                'tipo': self.servicio.tipo_servicio
+                'tipo_servicio': self.servicio.tipo_servicio
             } if self.servicio else None,
-            'usuario': f"{self.usuario.nombre} {self.usuario.apellido}" if self.usuario else None,
-            'notas': self.notas
+            'usuario': f"{self.usuario.nombre} {self.usuario.apellido}" if self.usuario else None
         }
 
 class Factura(db.Model):
