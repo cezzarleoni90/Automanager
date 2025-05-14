@@ -16,10 +16,11 @@ def get_mecanicos():
         return jsonify([{
             'id': m.id,
             'nombre': m.nombre,
+            'apellido': m.apellido,
             'especialidad': m.especialidad,
             'telefono': m.telefono,
             'email': m.email,
-            'activo': m.activo,
+            'activo': m.estado == 'activo',
             'servicios': [{
                 'id': s.id,
                 'descripcion': s.descripcion,
@@ -41,7 +42,7 @@ def get_mecanico(id):
             'especialidad': mecanico.especialidad,
             'telefono': mecanico.telefono,
             'email': mecanico.email,
-            'activo': mecanico.activo,
+            'activo': mecanico.estado == 'activo',
             'servicios': [{
                 'id': s.id,
                 'descripcion': s.descripcion,
@@ -74,7 +75,7 @@ def create_mecanico():
             especialidad=data['especialidad'],
             telefono=data['telefono'],
             email=data['email'],
-            activo=True
+            estado='activo'
         )
         db.session.add(nuevo_mecanico)
         db.session.commit()
@@ -94,7 +95,7 @@ def update_mecanico(id):
         mecanico.especialidad = data.get('especialidad', mecanico.especialidad)
         mecanico.telefono = data.get('telefono', mecanico.telefono)
         mecanico.email = data.get('email', mecanico.email)
-        mecanico.activo = data.get('activo', mecanico.activo)
+        mecanico.estado = data.get('estado', mecanico.estado)
         
         db.session.commit()
         return jsonify({"mensaje": "Mecánico actualizado exitosamente"}), 200

@@ -26,6 +26,11 @@ import {
   Grid,
   InputAdornment,
   Tooltip,
+  Chip,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -33,6 +38,7 @@ import {
   Delete as DeleteIcon,
   Search as SearchIcon,
   Warning as WarningIcon,
+  Category as CategoryIcon,
 } from '@mui/icons-material';
 
 function Inventario() {
@@ -62,36 +68,73 @@ function Inventario() {
     motivo: '',
   });
 
+  // Estado para categorías
+  const [categorias, setCategorias] = useState([
+    'Motor',
+    'Frenos', 
+    'Filtros',
+    'Suspensión',
+    'Transmisión',
+    'Eléctrico',
+    'Carrocería',
+    'General'
+  ]);
+  const [openCategoriasDialog, setOpenCategoriasDialog] = useState(false);
+  const [nuevaCategoria, setNuevaCategoria] = useState('');
+
   useEffect(() => {
     cargarRepuestos();
   }, []);
 
   const cargarRepuestos = async () => {
     try {
+      console.log('🔄 Iniciando carga de repuestos...');
       setLoading(true);
       const response = await fetch('http://localhost:5000/api/inventario/repuestos', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
+        }
       });
-
-      if (!response.ok) {
-        throw new Error('Error al cargar los repuestos');
-      }
-
+      
       const data = await response.json();
-      setRepuestos(Array.isArray(data) ? data : []);
+      console.log('📦 Repuestos recibidos:', data);
+      
+      // Mapear stock_actual a stock para compatibilidad
+      setRepuestos((data.repuestos || []).map(repuesto => ({
+        ...repuesto,
+        stock: repuesto.stock_actual || repuesto.stock || 0
+      })));
+      console.log('✅ Repuestos actualizados en estado');
     } catch (error) {
-      setError(error.message);
-      setRepuestos([]);
+      console.error('❌ Error en cargarRepuestos:', error);
+      setError('Error al cargar repuestos');
     } finally {
       setLoading(false);
     }
   };
 
+  // Gestión de categorías
+  const handleAgregarCategoria = () => {
+    if (nuevaCategoria && !categorias.includes(nuevaCategoria)) {
+      setCategorias([...categorias, nuevaCategoria].sort());
+      setNuevaCategoria('');
+      setSuccess('Categoría agregada exitosamente');
+    }
+  };
+
+  const handleEliminarCategoria = (categoria) => {
+    if (categorias.length > 1) { // No permitir eliminar la última categoría
+      setCategorias(categorias.filter(c => c !== categoria));
+      setSuccess('Categoría eliminada exitosamente');
+    }
+  };
+
   const handleOpenDialog = (repuesto = null) => {
     if (repuesto) {
-      setRepuestoActual(repuesto);
+      setRepuestoActual({
+        ...repuesto,
+        stock: repuesto.stock_actual || repuesto.stock || 0
+      });
     } else {
       setRepuestoActual({
         codigo: '',
@@ -103,7 +146,7 @@ function Inventario() {
         stock_minimo: 5,
         precio_compra: 0,
         precio_venta: 0,
-        categoria: '',
+        categoria: categorias[0] || '',
         ubicacion: '',
       });
     }
@@ -157,23 +200,38 @@ function Inventario() {
       
       const method = repuestoActual.id ? 'PUT' : 'POST';
 
+      const dataToSend = {
+        codigo: repuestoActual.codigo,
+        nombre: repuestoActual.nombre,
+        categoria: repuestoActual.categoria || 'General',
+        precio_compra: parseFloat(repuestoActual.precio_compra),
+        precio_venta: parseFloat(repuestoActual.precio_venta),
+        stock: parseInt(repuestoActual.stock) || 0,
+        stock_minimo: parseInt(repuestoActual.stock_minimo) || 0,
+        descripcion: repuestoActual.descripcion || ''
+      };
+
       const response = await fetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
-        body: JSON.stringify(repuestoActual),
+        body: JSON.stringify(dataToSend),
       });
 
       if (!response.ok) {
-        throw new Error('Error al guardar el repuesto');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error al guardar el repuesto');
       }
 
       setSuccess(`Repuesto ${repuestoActual.id ? 'actualizado' : 'creado'} exitosamente`);
       handleCloseDialog();
-      cargarRepuestos();
+      console.log('🔄 Recargando lista de repuestos...');
+      await cargarRepuestos();
+      console.log('✅ Lista recargada');
     } catch (error) {
+      console.error('Error completo:', error);
       setError(error.message);
     } finally {
       setLoading(false);
@@ -247,13 +305,22 @@ function Inventario() {
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Gestión de Inventario</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-        >
-          Nuevo Repuesto
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<CategoryIcon />}
+            onClick={() => setOpenCategoriasDialog(true)}
+          >
+            Gestionar Categorías
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog()}
+          >
+            Nuevo Repuesto
+          </Button>
+        </Box>
       </Box>
 
       <Paper sx={{ p: 2, mb: 3 }}>
@@ -279,9 +346,8 @@ function Inventario() {
             <TableRow>
               <TableCell>Código</TableCell>
               <TableCell>Nombre</TableCell>
-              <TableCell>Marca/Modelo</TableCell>
+              <TableCell>Categoría</TableCell>
               <TableCell>Stock</TableCell>
-              <TableCell>Precio Compra</TableCell>
               <TableCell>Precio Venta</TableCell>
               <TableCell>Acciones</TableCell>
             </TableRow>
@@ -292,19 +358,22 @@ function Inventario() {
                 <TableCell>{repuesto.codigo}</TableCell>
                 <TableCell>{repuesto.nombre}</TableCell>
                 <TableCell>
-                  {repuesto.marca} {repuesto.modelo}
+                  <Chip 
+                    label={repuesto.categoria || 'Sin categoría'} 
+                    size="small"
+                    sx={{ bgcolor: '#e3f2fd', color: '#1976d2' }}
+                  />
                 </TableCell>
                 <TableCell>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     {repuesto.stock}
                     {repuesto.stock <= repuesto.stock_minimo && (
-                      <Tooltip title="Stock bajo">
+                      <Tooltip title={`Stock bajo (mínimo: ${repuesto.stock_minimo})`}>
                         <WarningIcon color="warning" fontSize="small" />
                       </Tooltip>
                     )}
                   </Box>
                 </TableCell>
-                <TableCell>${repuesto.precio_compra}</TableCell>
                 <TableCell>${repuesto.precio_venta}</TableCell>
                 <TableCell>
                   <Box sx={{ display: 'flex', gap: 1 }}>
@@ -437,13 +506,22 @@ function Inventario() {
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Categoría"
-                  name="categoria"
-                  value={repuestoActual.categoria}
-                  onChange={handleInputChange}
-                />
+                <FormControl fullWidth>
+                  <InputLabel>Categoría</InputLabel>
+                  <Select
+                    name="categoria"
+                    value={repuestoActual.categoria}
+                    onChange={handleInputChange}
+                    label="Categoría"
+                    required
+                  >
+                    {categorias.map((categoria) => (
+                      <MenuItem key={categoria} value={categoria}>
+                        {categoria}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
@@ -462,6 +540,57 @@ function Inventario() {
           <Button onClick={handleSubmit} variant="contained">
             {repuestoActual.id ? 'Actualizar' : 'Crear'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Diálogo para gestionar categorías */}
+      <Dialog open={openCategoriasDialog} onClose={() => setOpenCategoriasDialog(false)}>
+        <DialogTitle>Gestión de Categorías</DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <TextField
+              fullWidth
+              label="Nueva Categoría"
+              value={nuevaCategoria}
+              onChange={(e) => setNuevaCategoria(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  handleAgregarCategoria();
+                }
+              }}
+              sx={{ mb: 2 }}
+            />
+            <Button
+              variant="contained"
+              onClick={handleAgregarCategoria}
+              fullWidth
+              sx={{ mb: 2 }}
+            >
+              Agregar Categoría
+            </Button>
+            <Typography variant="h6" sx={{ mb: 1 }}>
+              Categorías Existentes
+            </Typography>
+            <List>
+              {categorias.map((categoria) => (
+                <ListItem key={categoria}>
+                  <ListItemText primary={categoria} />
+                  <ListItemSecondaryAction>
+                    <IconButton
+                      edge="end"
+                      onClick={() => handleEliminarCategoria(categoria)}
+                      disabled={categorias.length <= 1}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenCategoriasDialog(false)}>Cerrar</Button>
         </DialogActions>
       </Dialog>
 
