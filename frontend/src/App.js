@@ -1,15 +1,12 @@
 import React from 'react';
 import { 
-  BrowserRouter as Router, 
-  Routes, 
-  Route, 
   Navigate,
   createBrowserRouter,
   RouterProvider
 } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Componentes
@@ -38,48 +35,53 @@ const theme = createTheme({
   },
 });
 
-const router = createBrowserRouter([
-  {
-    path: '/login',
-    element: <Login />
-  },
-  {
-    path: '/',
-    element: <Navigate to="/dashboard" replace />
-  },
-  {
-    path: '/',
-    element: (
-      <ProtectedRoute>
-        <Layout />
-      </ProtectedRoute>
-    ),
-    children: [
-      { path: 'dashboard', element: <Dashboard /> },
-      { path: 'clientes', element: <Clientes /> },
-      { path: 'vehiculos', element: <Vehiculos /> },
-      { path: 'servicios', element: <Servicios /> },
-      { path: 'inventario', element: <Inventario /> },
-      { path: 'mecanicos', element: <Mecanicos /> },
-      { path: 'calendario', element: <Calendario /> },
-      { path: 'facturacion', element: <Facturacion /> },
-      { path: 'configuracion', element: <Configuracion /> },
-      { path: 'perfil', element: <Perfil /> }
-    ]
-  }
-], {
-  future: {
-    v7_startTransition: true,
-    v7_relativeSplatPath: true
-  }
-});
+// Este componente se renderiza dentro del AuthProvider
+function AppRouter() {
+  const router = createBrowserRouter([
+    {
+      path: '/login',
+      element: <Login />
+    },
+    {
+      path: '/',
+      element: <Navigate to="/dashboard" replace />
+    },
+    {
+      path: '/',
+      element: (
+        <ProtectedRoute>
+          <Layout />
+        </ProtectedRoute>
+      ),
+      children: [
+        { path: 'dashboard', element: <Dashboard /> },
+        { path: 'clientes', element: <Clientes /> },
+        { path: 'vehiculos', element: <Vehiculos /> },
+        { path: 'servicios', element: <Servicios /> },
+        { path: 'inventario', element: <Inventario /> },
+        { path: 'mecanicos', element: <Mecanicos /> },
+        { path: 'calendario', element: <Calendario /> },
+        { path: 'facturacion', element: <Facturacion /> },
+        { path: 'configuracion', element: <Configuracion /> },
+        { path: 'perfil', element: <Perfil /> }
+      ]
+    }
+  ], {
+    future: {
+      v7_startTransition: true,
+      v7_relativeSplatPath: true
+    }
+  });
+
+  return <RouterProvider router={router} />;
+}
 
 function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <AuthProvider>
-        <RouterProvider router={router} />
+        <AppRouter />
       </AuthProvider>
     </ThemeProvider>
   );

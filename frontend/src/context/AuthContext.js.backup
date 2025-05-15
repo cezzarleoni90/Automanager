@@ -15,35 +15,23 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const verifyToken = async (token) => {
-    try {
-      const response = await axios.get('http://localhost:5000/api/auth/profile', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error al verificar token:', error);
-      return null;
-    }
-  };
-
   useEffect(() => {
-    const initializeAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        const userData = await verifyToken(token);
+    const token = localStorage.getItem('token');
+    if (token) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      // Aquí podrías hacer una llamada al backend para verificar el token
+      // y obtener la información del usuario
+      try {
+        const userData = localStorage.getItem('user');
         if (userData) {
-          setUser(userData);
-        } else {
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
+          setUser(JSON.parse(userData));
         }
+      } catch (error) {
+        console.error('Error al obtener datos del usuario:', error);
+        localStorage.removeItem('user');
       }
-      setLoading(false);
-    };
-
-    initializeAuth();
+    }
+    setLoading(false);
   }, []);
 
   const login = async (email, password) => {
@@ -53,11 +41,11 @@ export const AuthProvider = ({ children }) => {
         password
       });
 
-      const { access_token, usuario } = response.data;
-      localStorage.setItem('token', access_token);
-      localStorage.setItem('user', JSON.stringify(usuario));
-      axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-      setUser(usuario);
+      const { token, user } = response.data;
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      setUser(user);
       return true;
     } catch (error) {
       console.error('Error en login:', error);

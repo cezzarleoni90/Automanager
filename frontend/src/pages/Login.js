@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Container,
   Box,
@@ -10,7 +10,7 @@ import {
   Alert,
   CircularProgress
 } from '@mui/material';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -18,7 +18,16 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const location = useLocation();
+  const { login, isAuthenticated } = useAuth();
+
+  // Redirigir si ya está autenticado
+  useEffect(() => {
+    if (isAuthenticated) {
+      const from = location.state?.from?.pathname || '/dashboard';
+      navigate(from, { replace: true });
+    }
+  }, [isAuthenticated, navigate, location]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -26,31 +35,20 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Error al iniciar sesión');
-      }
-
-      // Actualizar el contexto de autenticación
-      await login(data.access_token, data.usuario);
-
-      // Redirigir al dashboard
-      navigate('/dashboard');
+      // Usar la función login del contexto directamente
+      await login(email, password);
+      
+      // Redirigir al dashboard o a la ruta anterior
+      const from = location.state?.from?.pathname || '/dashboard';
+      navigate(from, { replace: true });
     } catch (error) {
       console.error('Error de login:', error);
-      if (error.message === 'Failed to fetch') {
+      if (error.message === 'Network Error' || error.message === 'Failed to fetch') {
         setError('No se pudo conectar con el servidor. Por favor, verifica que el servidor esté en ejecución.');
+      } else if (error.response) {
+        setError(error.response.data.error || 'Credenciales inválidas. Por favor, intenta nuevamente.');
       } else {
-        setError(error.message || 'Error al iniciar sesión. Por favor, intenta nuevamente.');
+        setError('Error al iniciar sesión. Por favor, intenta nuevamente.');
       }
     } finally {
       setLoading(false);

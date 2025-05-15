@@ -10,7 +10,7 @@ def setup_cors(app):
         r"/*": {
             "origins": ["http://localhost:3000"],
             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization", "Accept"],
+            "allow_headers": ["Content-Type", "Authorization", "Accept", "Cache-Control", "Pragma"],
             "expose_headers": ["Content-Type", "Authorization"],
             "supports_credentials": True,
             "max_age": 3600
@@ -22,7 +22,7 @@ def handle_preflight():
     if request.method == "OPTIONS":
         response = jsonify({"status": "ok"})
         response.headers.add("Access-Control-Allow-Origin", "http://localhost:3000")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization,Accept")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization,Accept,Cache-Control,Pragma")
         response.headers.add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
         response.headers.add("Access-Control-Allow-Credentials", "true")
         response.headers.add("Access-Control-Max-Age", "3600")

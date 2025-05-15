@@ -44,7 +44,7 @@ def login():
         return jsonify({'error': str(e)}), 500
 
 # Registrar usuario
-@auth_bp.route('/api/auth/register', methods=['POST'])
+@auth_bp.route('/register', methods=['POST'])
 @jwt_required()
 def register():
     try:
@@ -87,7 +87,7 @@ def register():
         return jsonify({'error': str(e)}), 500
 
 # Obtener perfil de usuario
-@auth_bp.route('/api/auth/profile', methods=['GET'])
+@auth_bp.route('/profile', methods=['GET'])
 @jwt_required()
 def get_profile():
     try:
@@ -108,7 +108,7 @@ def get_profile():
         return jsonify({'error': str(e)}), 500
 
 # Actualizar perfil de usuario
-@auth_bp.route('/api/auth/profile', methods=['PUT'])
+@auth_bp.route('/profile', methods=['PUT'])
 @jwt_required()
 def update_profile():
     try:
@@ -150,7 +150,7 @@ def update_profile():
         return jsonify({'error': str(e)}), 500
 
 # Cambiar contraseña
-@auth_bp.route('/api/auth/change-password', methods=['PUT'])
+@auth_bp.route('/change-password', methods=['PUT'])
 @jwt_required()
 def change_password():
     try:
@@ -181,7 +181,7 @@ def change_password():
         return jsonify({'error': str(e)}), 500
 
 # Obtener perfil del usuario actual
-@auth_bp.route('/api/auth/perfil', methods=['GET'])
+@auth_bp.route('/perfil', methods=['GET'])
 @jwt_required()
 def get_perfil():
     try:
@@ -200,7 +200,7 @@ def get_perfil():
         return jsonify({'error': str(e)}), 500
 
 # Actualizar perfil del usuario actual
-@auth_bp.route('/api/auth/perfil', methods=['PUT'])
+@auth_bp.route('/perfil', methods=['PUT'])
 @jwt_required()
 def update_perfil():
     try:
@@ -234,7 +234,7 @@ def update_perfil():
         return jsonify({'error': str(e)}), 500
 
 # Cambiar estado de usuario (solo administradores)
-@auth_bp.route('/api/auth/usuarios/<int:id>/estado', methods=['PUT'])
+@auth_bp.route('/usuarios/<int:id>/estado', methods=['PUT'])
 @jwt_required()
 def cambiar_estado_usuario(id):
     try:
@@ -276,7 +276,7 @@ def cambiar_estado_usuario(id):
         return jsonify({'error': str(e)}), 500
 
 # Listar usuarios (solo administradores)
-@auth_bp.route('/api/auth/usuarios', methods=['GET'])
+@auth_bp.route('/usuarios', methods=['GET'])
 @jwt_required()
 def listar_usuarios():
     try:

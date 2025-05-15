@@ -38,9 +38,9 @@ import {
   DirectionsCar as CarIcon,
   Visibility as VisibilityIcon,
 } from '@mui/icons-material';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../services/api';
+import { getClientes, updateCliente, createCliente, deleteCliente } from '../services/api';
 
 function Clientes() {
   const navigate = useNavigate();
@@ -67,7 +67,7 @@ function Clientes() {
 
   const cargarClientes = async () => {
     try {
-      const data = await api.getClientes();
+      const data = await getClientes();
       setClientes(data.clientes || []);
     } catch (error) {
       setError(error.message);
@@ -111,10 +111,10 @@ function Clientes() {
 
     try {
       if (clienteActual.id) {
-        await api.updateCliente(clienteActual.id, clienteActual);
+        await updateCliente(clienteActual.id, clienteActual);
         setSuccess('Cliente actualizado exitosamente');
       } else {
-        await api.createCliente(clienteActual);
+        await createCliente(clienteActual);
         setSuccess('Cliente creado exitosamente');
       }
       handleCloseDialog();
@@ -132,7 +132,7 @@ function Clientes() {
     }
 
     try {
-      await api.deleteCliente(id);
+      await deleteCliente(id);
       setSuccess('Cliente eliminado exitosamente');
       cargarClientes();
     } catch (error) {

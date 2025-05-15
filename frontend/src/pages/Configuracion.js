@@ -27,7 +27,7 @@ import {
   Notifications as NotificationsIcon,
   Business as BusinessIcon,
 } from '@mui/icons-material';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 function Configuracion() {
   const { user } = useAuth();

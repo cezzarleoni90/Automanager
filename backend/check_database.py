@@ -1,6 +1,8 @@
 from app import create_app
 from models import db, Cliente, Vehiculo, Repuesto, Mecanico, Servicio, HoraTrabajo, MovimientoInventario, Factura, Usuario
 from sqlalchemy import inspect
+import sqlite3
+import os
 
 app = create_app()
 
@@ -100,4 +102,76 @@ with app.app_context():
         for column in Mecanico.__table__.columns:
             print(f"  - {column.name}: {column.type}")
     except Exception as e:
-        print(f"  Error: {e}") 
+        print(f"  Error: {e}")
+
+def check_database():
+    app = create_app()
+    
+    # Ruta completa a la base de datos
+    db_path = os.path.join(os.path.dirname(__file__), 'automanager.db')
+    
+    # Verificar que el archivo existe
+    if not os.path.exists(db_path):
+        print(f"❌ No se encuentra la base de datos en: {db_path}")
+        return
+    
+    print(f"📂 Usando base de datos: {db_path}")
+    
+    # Conectar directamente a la base de datos
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    try:
+        # Listar todas las tablas existentes
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = cursor.fetchall()
+        
+        print("\n📋 Tablas existentes en la base de datos:")
+        for table in tables:
+            print(f"  - {table[0]}")
+        
+        # Verificar si existe la tabla mecanico
+        if ('mecanico',) in tables:
+            print("✅ La tabla mecanico existe")
+        else:
+            print("\n⚠️ La tabla mecanico NO existe, creándola...")
+            
+            # Script SQL para crear la tabla mecanico
+            create_table_sql = '''
+            CREATE TABLE mecanico (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT NOT NULL,
+                apellido TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                telefono TEXT,
+                especialidad TEXT,
+                tarifa_hora REAL DEFAULT 0.0,
+                fecha_contratacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                estado TEXT DEFAULT 'activo'
+            );
+            '''
+            
+            cursor.execute(create_table_sql)
+            conn.commit()
+            print("✅ Tabla mecanico creada exitosamente")
+            
+            # Crear un mecánico de prueba
+            cursor.execute('''
+            INSERT INTO mecanico (nombre, apellido, email, telefono, especialidad, tarifa_hora, estado)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', ('Juan', 'Pérez', 'juan.perez@automanager.com', '123456789', 'Mecánica General', 25.0, 'activo'))
+            
+            conn.commit()
+            print("✅ Mecánico de prueba creado exitosamente")
+        
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        print(f"Tipo de error: {type(e).__name__}")
+        import traceback
+        traceback.print_exc()
+        conn.rollback()
+    finally:
+        conn.close()
+
+if __name__ == "__main__":
+    check_database() 

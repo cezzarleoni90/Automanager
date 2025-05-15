@@ -27,26 +27,20 @@ def get_vehiculos():
                     'apellido': v.cliente.apellido,
                     'email': v.cliente.email,
                     'telefono': v.cliente.telefono
-                } if v.cliente else None
+                } if v.cliente else None,
+                'servicios_recientes': [{
+                    'id': s.id,
+                    'tipo_servicio': s.tipo_servicio,
+                    'descripcion': s.descripcion,
+                    'fecha_inicio': s.fecha_inicio.isoformat() if s.fecha_inicio else None,
+                    'fecha_fin': s.fecha_fin.isoformat() if s.fecha_fin else None,
+                    'estado': s.estado,
+                    'mecanico': {
+                        'id': s.mecanico.id,
+                        'nombre': f"{s.mecanico.nombre} {s.mecanico.apellido}"
+                    } if s.mecanico else None
+                } for s in sorted(v.servicios, key=lambda x: x.fecha_inicio or datetime.min, reverse=True)[:5]]
             } for v in vehiculos]
-        }), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@bp.route('/<int:id>', methods=['GET'])
-@jwt_required()
-def get_vehiculo(id):
-    try:
-        vehiculo = Vehiculo.query.get_or_404(id)
-        return jsonify({
-            'id': vehiculo.id,
-            'placa': vehiculo.placa,
-            'marca': vehiculo.marca,
-            'modelo': vehiculo.modelo,
-            'año': vehiculo.año,
-            'color': vehiculo.color,
-            'kilometraje': vehiculo.kilometraje,
-            'cliente_id': vehiculo.cliente_id
         }), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -155,33 +149,32 @@ def obtener_vehiculo(id):
             'modelo': vehiculo.modelo,
             'año': vehiculo.año,
             'color': vehiculo.color,
+            'kilometraje': vehiculo.kilometraje,
+            'cliente_id': vehiculo.cliente_id,
             'cliente': {
                 'id': vehiculo.cliente.id,
                 'nombre': vehiculo.cliente.nombre,
                 'apellido': vehiculo.cliente.apellido,
                 'email': vehiculo.cliente.email,
                 'telefono': vehiculo.cliente.telefono
-            },
+            } if vehiculo.cliente else None,
             'servicios_recientes': [{
                 'id': s.id,
                 'tipo': s.tipo_servicio,
                 'descripcion': s.descripcion,
-                'fecha_inicio': s.fecha_inicio.isoformat(),
+                'fecha_inicio': s.fecha_inicio.isoformat() if s.fecha_inicio else None,
                 'fecha_fin': s.fecha_fin.isoformat() if s.fecha_fin else None,
                 'estado': s.estado,
-                'mecanico': f"{s.mecanico.nombre} {s.mecanico.apellido}" if s.mecanico else None,
-                'factura': {
-                    'id': s.facturas[0].id,
-                    'numero': s.facturas[0].numero,
-                    'total': s.facturas[0].total,
-                    'estado': s.facturas[0].estado
-                } if s.facturas else None
+                'mecanico': {
+                    'id': s.mecanico.id,
+                    'nombre': f"{s.mecanico.nombre} {s.mecanico.apellido}"
+                } if s.mecanico else None
             } for s in servicios],
             'estadisticas': {
-                'total_servicios': len(vehiculo.servicios),
+                'total_servicios': len([s for s in vehiculo.servicios]),
                 'servicios_pendientes': len([s for s in vehiculo.servicios if s.estado == 'pendiente']),
                 'servicios_completados': len([s for s in vehiculo.servicios if s.estado == 'completado']),
-                'ultimo_servicio': vehiculo.servicios[0].fecha_inicio.isoformat() if vehiculo.servicios else None
+                'ultimo_servicio': vehiculo.servicios[0].fecha_inicio.isoformat() if vehiculo.servicios and len(vehiculo.servicios) > 0 else None
             }
         }), 200
     except Exception as e:

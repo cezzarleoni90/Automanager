@@ -238,6 +238,7 @@ class Mecanico(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     telefono = db.Column(db.String(20))
     especialidad = db.Column(db.String(100))
+    tarifa_hora = db.Column(db.Float, default=0.0)
     fecha_contratacion = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     estado = db.Column(db.String(20), default='activo')
     
@@ -307,13 +308,20 @@ class Servicio(db.Model):
     archivos = db.relationship('ArchivoServicio', back_populates='servicio', lazy=True)
     fotos = db.relationship('FotoServicio', back_populates='servicio', lazy=True)
 
-    def __init__(self, **kwargs):
+    def __init__(self, inicializar_estado=False, **kwargs):
         super(Servicio, self).__init__(**kwargs)
-        self.registrar_cambio_estado('pendiente', 'Servicio creado')
+        # Solo registrar cambio de estado si se indica explícitamente
+        # Esto evita que se registre un estado antes de tener un ID asignado
+        if inicializar_estado and self.id:
+            self.registrar_cambio_estado('pendiente', 'Servicio creado')
 
     def registrar_cambio_estado(self, nuevo_estado, comentario):
         if nuevo_estado not in self.ESTADOS:
             raise ValueError(f"Estado inválido: {nuevo_estado}")
+        
+        # Solo registrar el cambio si el servicio ya tiene ID
+        if self.id is None:
+            return
             
         historial = HistorialEstado(
             servicio_id=self.id,

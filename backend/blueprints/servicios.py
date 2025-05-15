@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from extensions import db
 from models import Servicio, Mecanico, Vehiculo, HoraTrabajo, Repuesto, MovimientoInventario, Usuario, Factura, HistorialEstado, Cliente
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from sqlalchemy import or_
 
 servicios_bp = Blueprint('servicios', __name__)
@@ -24,7 +24,7 @@ def get_mecanicos():
             'servicios': [{
                 'id': s.id,
                 'descripcion': s.descripcion,
-                'fecha': s.fecha.isoformat(),
+                'fecha_inicio': s.fecha_inicio.isoformat() if s.fecha_inicio else None,
                 'estado': s.estado
             } for s in m.servicios]
         } for m in mecanicos]), 200
@@ -39,6 +39,7 @@ def get_mecanico(id):
         return jsonify({
             'id': mecanico.id,
             'nombre': mecanico.nombre,
+            'apellido': mecanico.apellido,
             'especialidad': mecanico.especialidad,
             'telefono': mecanico.telefono,
             'email': mecanico.email,
@@ -46,7 +47,7 @@ def get_mecanico(id):
             'servicios': [{
                 'id': s.id,
                 'descripcion': s.descripcion,
-                'fecha': s.fecha.isoformat(),
+                'fecha_inicio': s.fecha_inicio.isoformat() if s.fecha_inicio else None,
                 'estado': s.estado,
                 'vehiculo': {
                     'id': s.vehiculo.id,
@@ -57,9 +58,9 @@ def get_mecanico(id):
             } for s in mecanico.servicios],
             'horas_trabajo': [{
                 'id': h.id,
-                'fecha': h.fecha.isoformat(),
-                'horas': h.horas,
-                'descripcion': h.descripcion
+                'fecha': h.fecha.isoformat() if h.fecha else None,
+                'horas_trabajadas': h.horas_trabajadas,
+                'descripcion': h.notas
             } for h in mecanico.horas_trabajo]
         }), 200
     except Exception as e:
@@ -125,61 +126,71 @@ def delete_mecanico(id):
 @jwt_required()
 def get_servicios():
     try:
-        # Obtener parámetros de filtrado
+        # Filtros opcionales
         estado = request.args.get('estado')
-        tipo = request.args.get('tipo')
-        fecha_inicio = request.args.get('fecha_inicio')
-        fecha_fin = request.args.get('fecha_fin')
-        busqueda = request.args.get('q')
+        cliente_id = request.args.get('cliente_id')
+        mecanico_id = request.args.get('mecanico_id')
+        vehiculo_id = request.args.get('vehiculo_id')
+        fecha_desde = request.args.get('fecha_desde')
+        fecha_hasta = request.args.get('fecha_hasta')
         
         # Construir query base
         query = Servicio.query
         
         # Aplicar filtros
         if estado:
-            query = query.filter_by(estado=estado)
-        if tipo:
-            query = query.filter_by(tipo_servicio=tipo)
-        if fecha_inicio:
-            query = query.filter(Servicio.fecha_inicio >= datetime.fromisoformat(fecha_inicio))
-        if fecha_fin:
-            query = query.filter(Servicio.fecha_inicio <= datetime.fromisoformat(fecha_fin))
-        if busqueda:
-            query = query.filter(
-                or_(
-                    Servicio.vehiculo.placa.ilike(f'%{busqueda}%'),
-                    Servicio.vehiculo.cliente.nombre.ilike(f'%{busqueda}%'),
-                    Servicio.vehiculo.cliente.apellido.ilike(f'%{busqueda}%'),
-                    Servicio.descripcion.ilike(f'%{busqueda}%')
-                )
-            )
+            query = query.filter(Servicio.estado == estado)
+        if cliente_id:
+            query = query.filter(Servicio.cliente_id == cliente_id)
+        if mecanico_id:
+            query = query.filter(Servicio.mecanico_id == mecanico_id)
+        if vehiculo_id:
+            query = query.filter(Servicio.vehiculo_id == vehiculo_id)
+        if fecha_desde:
+            query = query.filter(Servicio.fecha_inicio >= datetime.fromisoformat(fecha_desde))
+        if fecha_hasta:
+            query = query.filter(Servicio.fecha_inicio <= datetime.fromisoformat(fecha_hasta))
         
+        # Ordenar por fecha más reciente
         servicios = query.order_by(Servicio.fecha_inicio.desc()).all()
         
         return jsonify({
             'servicios': [{
-                'id': servicio.id,
-                'tipo_servicio': servicio.tipo_servicio,
-                'descripcion': servicio.descripcion,
-                'fecha_inicio': servicio.fecha_inicio.isoformat() if servicio.fecha_inicio else None,
-                'fecha_fin': servicio.fecha_fin.isoformat() if servicio.fecha_fin else None,
-                'estado': servicio.estado,
-                'vehiculo_id': servicio.vehiculo_id,
-                'mecanico_id': servicio.mecanico_id,
+                'id': s.id,
+                'tipo_servicio': s.tipo_servicio,
+                'descripcion': s.descripcion,
+                'estado': s.estado,
+                'prioridad': s.prioridad,
+                'fecha_inicio': s.fecha_inicio.isoformat(),
+                'fecha_fin': s.fecha_fin.isoformat() if s.fecha_fin else None,
+                'fecha_estimada_fin': s.fecha_estimada_fin.isoformat() if s.fecha_estimada_fin else None,
+                'costo_estimado': s.costo_estimado,
+                'costo_real': s.costo_real,
+                'cliente': {
+                    'id': s.cliente.id,
+                    'nombre': f"{s.cliente.nombre} {s.cliente.apellido}",
+                    'email': s.cliente.email
+                } if s.cliente else None,
                 'vehiculo': {
-                    'id': servicio.vehiculo.id,
-                    'placa': servicio.vehiculo.placa,
-                    'marca': servicio.vehiculo.marca,
-                    'modelo': servicio.vehiculo.modelo
-                } if servicio.vehiculo else None,
+                    'id': s.vehiculo.id,
+                    'placa': s.vehiculo.placa,
+                    'marca': s.vehiculo.marca,
+                    'modelo': s.vehiculo.modelo,
+                    'año': s.vehiculo.año
+                } if s.vehiculo else None,
                 'mecanico': {
-                    'id': servicio.mecanico.id,
-                    'nombre': servicio.mecanico.nombre,
-                    'apellido': servicio.mecanico.apellido
-                } if servicio.mecanico else None
-            } for servicio in servicios]
-        })
+                    'id': s.mecanico.id,
+                    'nombre': f"{s.mecanico.nombre} {s.mecanico.apellido}",
+                    'especialidad': s.mecanico.especialidad
+                } if s.mecanico else None,
+                'total_horas': sum(h.horas_trabajadas for h in s.horas_trabajo.all()),
+                'total_repuestos': len(s.repuestos),
+                'notas': s.notas
+            } for s in servicios]
+        }), 200
+        
     except Exception as e:
+        print(f"Error en get_servicios: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @servicios_bp.route('/<int:id>', methods=['GET'])
@@ -187,6 +198,7 @@ def get_servicios():
 def get_servicio(id):
     try:
         servicio = Servicio.query.get_or_404(id)
+        
         return jsonify({
             'id': servicio.id,
             'tipo_servicio': servicio.tipo_servicio,
@@ -194,32 +206,58 @@ def get_servicio(id):
             'fecha_inicio': servicio.fecha_inicio.isoformat() if servicio.fecha_inicio else None,
             'fecha_fin': servicio.fecha_fin.isoformat() if servicio.fecha_fin else None,
             'estado': servicio.estado,
-            'vehiculo_id': servicio.vehiculo_id,
-            'mecanico_id': servicio.mecanico_id,
             'vehiculo': {
                 'id': servicio.vehiculo.id,
                 'placa': servicio.vehiculo.placa,
                 'marca': servicio.vehiculo.marca,
-                'modelo': servicio.vehiculo.modelo
+                'modelo': servicio.vehiculo.modelo,
+                'año': servicio.vehiculo.año,
+                'color': servicio.vehiculo.color,
+                'vin': servicio.vehiculo.vin
             } if servicio.vehiculo else None,
             'mecanico': {
                 'id': servicio.mecanico.id,
-                'nombre': servicio.mecanico.nombre,
-                'apellido': servicio.mecanico.apellido
-            } if servicio.mecanico else None
-        })
+                'nombre': f"{servicio.mecanico.nombre} {servicio.mecanico.apellido}",
+                'especialidad': servicio.mecanico.especialidad,
+                'tarifa_hora': getattr(servicio.mecanico, 'tarifa_hora', 0)
+            } if servicio.mecanico else None,
+            'repuestos': [{
+                'id': r.id,
+                'codigo': r.codigo,
+                'nombre': r.nombre,
+                'cantidad': next((mov.cantidad for mov in servicio.movimientos_inventario.all() 
+                                if mov.repuesto_id == r.id), 0),
+                'precio_unitario': r.precio_venta,
+                'subtotal': next((mov.cantidad * r.precio_venta for mov in servicio.movimientos_inventario.all() 
+                                if mov.repuesto_id == r.id), 0)
+            } for r in servicio.repuestos],
+            'horas_trabajo': [{
+                'id': h.id,
+                'fecha': h.fecha.isoformat() if h.fecha else None,
+                'horas_trabajadas': h.horas_trabajadas,
+                'tipo_trabajo': h.tipo_trabajo,
+                'notas': h.notas,
+                'costo': h.horas_trabajadas * (servicio.mecanico.tarifa_hora if servicio.mecanico else 0)
+            } for h in servicio.horas_trabajo.all()],
+            'cliente': {
+                'id': servicio.vehiculo.cliente.id,
+                'nombre': servicio.vehiculo.cliente.nombre,
+                'apellido': servicio.vehiculo.cliente.apellido,
+                'telefono': servicio.vehiculo.cliente.telefono,
+                'email': servicio.vehiculo.cliente.email
+            } if servicio.vehiculo and servicio.vehiculo.cliente else None
+        }), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 @servicios_bp.route('/', methods=['POST'])
 @jwt_required()
-def crear_servicio():
+def create_servicio():
     try:
         data = request.get_json()
-        usuario_id = get_jwt_identity()
         
-        # Validar datos requeridos
-        required_fields = ['tipo_servicio', 'vehiculo_id', 'descripcion']
+        # Validar campos requeridos
+        required_fields = ['tipo_servicio', 'descripcion', 'vehiculo_id']
         for field in required_fields:
             if field not in data:
                 return jsonify({'error': f'Campo {field} es requerido'}), 400
@@ -227,71 +265,129 @@ def crear_servicio():
         # Verificar que el vehículo existe
         vehiculo = Vehiculo.query.get_or_404(data['vehiculo_id'])
         
-        # Verificar que el mecánico existe si se proporciona
+        # Verificar cliente (opcional, si no se proporciona tomar del vehículo)
+        cliente_id = data.get('cliente_id') or vehiculo.cliente_id
+        cliente = Cliente.query.get_or_404(cliente_id)
+        
+        # Verificar mecánico (opcional)
         mecanico = None
-        if 'mecanico_id' in data:
+        if data.get('mecanico_id'):
             mecanico = Mecanico.query.get_or_404(data['mecanico_id'])
         
-        # Crear nuevo servicio
-        nuevo_servicio = Servicio(
+        # Obtener usuario actual
+        usuario_id = get_jwt_identity()
+        usuario = Usuario.query.get_or_404(usuario_id)
+        
+        # Crear servicio sin inicializar automáticamente el estado
+        servicio = Servicio(
+            inicializar_estado=False,  # No inicializar el estado automáticamente
             tipo_servicio=data['tipo_servicio'],
             descripcion=data['descripcion'],
-            fecha_inicio=datetime.now(),
-            estado='pendiente',
             vehiculo_id=vehiculo.id,
+            cliente_id=cliente.id,
             mecanico_id=mecanico.id if mecanico else None,
-            usuario_id=usuario_id,
+            usuario_id=usuario.id,
             prioridad=data.get('prioridad', 'normal'),
-            notas=data.get('notas'),
-            diagnostico=data.get('diagnostico'),
-            recomendaciones=data.get('recomendaciones'),
-            costo_estimado=data.get('costo_estimado'),
-            costo_real=data.get('costo_real'),
+            fecha_inicio=datetime.utcnow(),
+            fecha_estimada_fin=datetime.fromisoformat(data['fecha_estimada_fin']) 
+                              if data.get('fecha_estimada_fin') else None,
+            costo_estimado=data.get('costo_estimado', 0),
             kilometraje_entrada=data.get('kilometraje_entrada'),
-            kilometraje_salida=data.get('kilometraje_salida'),
             nivel_combustible_entrada=data.get('nivel_combustible_entrada'),
-            nivel_combustible_salida=data.get('nivel_combustible_salida')
+            diagnostico=data.get('diagnostico', ''),
+            notas=data.get('notas', ''),
+            estado='pendiente'
         )
         
-        db.session.add(nuevo_servicio)
+        # Primero guardar el servicio para obtener un ID
+        db.session.add(servicio)
+        db.session.commit()
+        
+        # Ahora crear el historial de estado manualmente
+        historial = HistorialEstado(
+            servicio_id=servicio.id,
+            estado_anterior='pendiente',
+            estado_nuevo='pendiente',
+            comentario='Servicio creado',
+            fecha=datetime.utcnow(),
+            usuario_id=usuario_id
+        )
+        db.session.add(historial)
+        
+        # Actualizar último servicio del vehículo
+        vehiculo.ultimo_servicio = datetime.utcnow()
+        if servicio.kilometraje_entrada:
+            vehiculo.kilometraje = servicio.kilometraje_entrada
+        
+        # Actualizar última visita del cliente
+        cliente.ultima_visita = datetime.utcnow()
+        
         db.session.commit()
         
         return jsonify({
             'mensaje': 'Servicio creado exitosamente',
             'servicio': {
-                'id': nuevo_servicio.id,
-                'tipo': nuevo_servicio.tipo_servicio,
-                'descripcion': nuevo_servicio.descripcion,
-                'fecha_inicio': nuevo_servicio.fecha_inicio.isoformat(),
-                'estado': nuevo_servicio.estado,
-                'vehiculo': {
-                    'id': vehiculo.id,
-                    'placa': vehiculo.placa,
-                    'cliente': f"{vehiculo.cliente.nombre} {vehiculo.cliente.apellido}"
-                },
-                'mecanico': f"{mecanico.nombre} {mecanico.apellido}" if mecanico else None
+                'id': servicio.id,
+                'tipo_servicio': servicio.tipo_servicio,
+                'estado': servicio.estado,
+                'fecha_inicio': servicio.fecha_inicio.isoformat()
             }
         }), 201
+        
     except Exception as e:
         db.session.rollback()
+        print(f"Error en create_servicio: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @servicios_bp.route('/<int:id>', methods=['PUT'])
 @jwt_required()
-def actualizar_servicio(id):
+def update_servicio(id):
     try:
         servicio = Servicio.query.get_or_404(id)
         data = request.get_json()
+        usuario_id = get_jwt_identity()
         
-        # Actualizar campos permitidos
-        if 'tipo_servicio' in data:
-            servicio.tipo_servicio = data['tipo_servicio']
-        if 'descripcion' in data:
-            servicio.descripcion = data['descripcion']
-        if 'estado' in data:
-            servicio.estado = data['estado']
+        # Campos que se pueden actualizar
+        updateable_fields = [
+            'tipo_servicio', 'descripcion', 'prioridad', 'fecha_estimada_fin',
+            'costo_estimado', 'diagnostico', 'recomendaciones', 'notas',
+            'kilometraje_entrada', 'kilometraje_salida',
+            'nivel_combustible_entrada', 'nivel_combustible_salida',
+            'estado'  # Agregar estado a los campos actualizables
+        ]
+        
+        # Guardar el estado anterior antes de actualizarlo
+        estado_anterior = servicio.estado
+        
+        for field in updateable_fields:
+            if field in data:
+                if field in ['fecha_estimada_fin'] and data[field]:
+                    setattr(servicio, field, datetime.fromisoformat(data[field]))
+                else:
+                    setattr(servicio, field, data[field])
+        
+        # Si se cambió el estado, registrar en el historial
+        if 'estado' in data and data['estado'] != estado_anterior:
+            print(f"Detectado cambio de estado en update_servicio: {estado_anterior} -> {data['estado']}")
+            
+            # Crear registro en historial de estados
+            historial = HistorialEstado(
+                servicio_id=servicio.id,
+                estado_anterior=estado_anterior,
+                estado_nuevo=data['estado'],
+                comentario=data.get('comentario', f'Estado cambiado a {data["estado"]} desde formulario de edición'),
+                fecha=datetime.utcnow(),
+                usuario_id=usuario_id
+            )
+            db.session.add(historial)
+            
+            # Actualizar fechas según el estado
             if data['estado'] == 'completado' and not servicio.fecha_fin:
-                servicio.fecha_fin = datetime.now()
+                servicio.fecha_fin = datetime.utcnow()
+            elif estado_anterior == 'completado' and data['estado'] != 'completado':
+                servicio.fecha_fin = None
+        
+        # Actualizar mecánico si se proporciona
         if 'mecanico_id' in data:
             if data['mecanico_id']:
                 mecanico = Mecanico.query.get_or_404(data['mecanico_id'])
@@ -299,44 +395,20 @@ def actualizar_servicio(id):
             else:
                 servicio.mecanico_id = None
         
-        # Actualizar campos adicionales
-        if 'prioridad' in data:
-            servicio.prioridad = data['prioridad']
-        if 'notas' in data:
-            servicio.notas = data['notas']
-        if 'diagnostico' in data:
-            servicio.diagnostico = data['diagnostico']
-        if 'recomendaciones' in data:
-            servicio.recomendaciones = data['recomendaciones']
-        if 'costo_estimado' in data:
-            servicio.costo_estimado = data['costo_estimado']
-        if 'costo_real' in data:
-            servicio.costo_real = data['costo_real']
-        if 'kilometraje_entrada' in data:
-            servicio.kilometraje_entrada = data['kilometraje_entrada']
-        if 'kilometraje_salida' in data:
-            servicio.kilometraje_salida = data['kilometraje_salida']
-        if 'nivel_combustible_entrada' in data:
-            servicio.nivel_combustible_entrada = data['nivel_combustible_entrada']
-        if 'nivel_combustible_salida' in data:
-            servicio.nivel_combustible_salida = data['nivel_combustible_salida']
-        
         db.session.commit()
         
         return jsonify({
             'mensaje': 'Servicio actualizado exitosamente',
             'servicio': {
                 'id': servicio.id,
-                'tipo': servicio.tipo_servicio,
-                'descripcion': servicio.descripcion,
-                'fecha_inicio': servicio.fecha_inicio.isoformat(),
-                'fecha_fin': servicio.fecha_fin.isoformat() if servicio.fecha_fin else None,
-                'estado': servicio.estado,
-                'mecanico': f"{servicio.mecanico.nombre} {servicio.mecanico.apellido}" if servicio.mecanico else None
+                'tipo_servicio': servicio.tipo_servicio,
+                'estado': servicio.estado
             }
         }), 200
+        
     except Exception as e:
         db.session.rollback()
+        print(f"Error en update_servicio: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @servicios_bp.route('/<int:id>', methods=['DELETE'])
@@ -344,11 +416,50 @@ def actualizar_servicio(id):
 def delete_servicio(id):
     try:
         servicio = Servicio.query.get_or_404(id)
+        
+        # Primero eliminar registros relacionados para evitar errores de integridad
+        # Eliminar historial de estados
+        if servicio.historial_estados:
+            for historial in servicio.historial_estados.all():
+                db.session.delete(historial)
+        
+        # Eliminar relación con repuestos
+        if servicio.repuestos:
+            for repuesto in servicio.repuestos:
+                servicio.repuestos.remove(repuesto)
+        
+        # Eliminar movimientos de inventario
+        if servicio.movimientos_inventario:
+            for movimiento in servicio.movimientos_inventario.all():
+                db.session.delete(movimiento)
+        
+        # Eliminar horas de trabajo
+        if servicio.horas_trabajo:
+            for hora in servicio.horas_trabajo.all():
+                db.session.delete(hora)
+        
+        # Eliminar eventos
+        if servicio.eventos:
+            for evento in servicio.eventos:
+                db.session.delete(evento)
+        
+        # Eliminar facturas
+        if servicio.facturas:
+            for factura in servicio.facturas.all():
+                db.session.delete(factura)
+        
+        # Hacer commit parcial para asegurar que se eliminen las relaciones
+        db.session.flush()
+        
+        # Ahora sí eliminar el servicio
         db.session.delete(servicio)
         db.session.commit()
+        
         return jsonify({'message': 'Servicio eliminado exitosamente'})
     except Exception as e:
         db.session.rollback()
+        # Añadir mensaje más detallado para depuración
+        print(f"Error al eliminar servicio {id}: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # Rutas para Horas de Trabajo
@@ -361,8 +472,9 @@ def add_hora_trabajo(servicio_id):
         
         nueva_hora = HoraTrabajo(
             fecha=datetime.now(timezone.utc),
-            horas=data['horas'],
-            descripcion=data['descripcion'],
+            horas_trabajadas=data['horas'],
+            tipo_trabajo=data.get('tipo_trabajo', 'general'),
+            notas=data['descripcion'],
             servicio_id=servicio_id,
             mecanico_id=servicio.mecanico_id
         )
@@ -518,59 +630,6 @@ def get_servicios_por_mecanico(mecanico_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Obtener servicio por ID
-@servicios_bp.route('/<int:id>', methods=['GET'])
-@jwt_required()
-def obtener_servicio(id):
-    try:
-        servicio = Servicio.query.get_or_404(id)
-        
-        return jsonify({
-            'id': servicio.id,
-            'tipo': servicio.tipo_servicio,
-            'descripcion': servicio.descripcion,
-            'fecha_inicio': servicio.fecha_inicio.isoformat(),
-            'fecha_fin': servicio.fecha_fin.isoformat() if servicio.fecha_fin else None,
-            'estado': servicio.estado,
-            'vehiculo': {
-                'id': servicio.vehiculo.id,
-                'placa': servicio.vehiculo.placa,
-                'marca': servicio.vehiculo.marca,
-                'modelo': servicio.vehiculo.modelo,
-                'cliente': {
-                    'id': servicio.vehiculo.cliente.id,
-                    'nombre': servicio.vehiculo.cliente.nombre,
-                    'apellido': servicio.vehiculo.cliente.apellido,
-                    'email': servicio.vehiculo.cliente.email,
-                    'telefono': servicio.vehiculo.cliente.telefono
-                }
-            },
-            'mecanico': {
-                'id': servicio.mecanico.id,
-                'nombre': servicio.mecanico.nombre,
-                'apellido': servicio.mecanico.apellido,
-                'especialidad': servicio.mecanico.especialidad,
-                'tarifa_hora': servicio.mecanico.tarifa_hora
-            } if servicio.mecanico else None,
-            'repuestos': [{
-                'id': r.id,
-                'codigo': r.codigo,
-                'nombre': r.nombre,
-                'cantidad': next((m.cantidad for m in servicio.movimientos_inventario if m.repuesto_id == r.id), 0),
-                'precio_compra': r.precio_compra,
-                'precio_venta': r.precio_venta,
-                'subtotal': next((m.cantidad * r.precio_venta for m in servicio.movimientos_inventario if m.repuesto_id == r.id), 0)
-            } for r in servicio.repuestos],
-            'factura': {
-                'id': servicio.facturas[0].id,
-                'numero': servicio.facturas[0].numero,
-                'total': servicio.facturas[0].total,
-                'estado': servicio.facturas[0].estado
-            } if servicio.facturas else None
-        }), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 # Registrar horas de trabajo
 @servicios_bp.route('/<int:id>/horas', methods=['POST'])
 @jwt_required()
@@ -593,12 +652,21 @@ def registrar_horas(id):
             return jsonify({'error': 'Las horas deben ser mayores a 0'}), 400
         
         # Registrar horas
+        fecha = datetime.now()
+        if 'fecha' in data and data['fecha']:
+            try:
+                fecha = datetime.fromisoformat(data['fecha'].replace('Z', '+00:00'))
+            except ValueError:
+                # Si hay error, usar la fecha actual
+                pass
+
         horas = HoraTrabajo(
             servicio_id=servicio.id,
             mecanico_id=mecanico.id,
-            horas=data['horas'],
-            descripcion=data['descripcion'],
-            fecha=datetime.now()
+            horas_trabajadas=data['horas'],
+            notas=data['descripcion'],
+            fecha=fecha,
+            tipo_trabajo=data.get('tipo_trabajo', 'general')
         )
         
         db.session.add(horas)
@@ -609,11 +677,11 @@ def registrar_horas(id):
             'horas': {
                 'id': horas.id,
                 'fecha': horas.fecha.isoformat(),
-                'horas': horas.horas,
-                'descripcion': horas.descripcion,
+                'horas_trabajadas': horas.horas_trabajadas,
+                'notas': horas.notas,
                 'mecanico': f"{mecanico.nombre} {mecanico.apellido}",
                 'tarifa': mecanico.tarifa_hora,
-                'subtotal': horas.horas * mecanico.tarifa_hora
+                'subtotal': horas.horas_trabajadas * mecanico.tarifa_hora
             }
         }), 201
     except Exception as e:
@@ -643,10 +711,10 @@ def agregar_repuesto_servicio(servicio_id):
         movimiento = MovimientoInventario(
             repuesto_id=data['repuesto_id'],
             servicio_id=servicio_id,
-            tipo_movimiento='salida',
+            tipo='salida',
             cantidad=data['cantidad'],
-            precio_unitario=repuesto.precio_venta,
-            razon=f'Servicio #{servicio_id}'
+            notas=f'Servicio #{servicio_id}',
+            fecha=datetime.utcnow()
         )
         
         # Actualizar stock del repuesto
@@ -664,7 +732,7 @@ def agregar_repuesto_servicio(servicio_id):
                 'id': movimiento.id,
                 'repuesto': repuesto.nombre,
                 'cantidad': movimiento.cantidad,
-                'precio_total': movimiento.cantidad * movimiento.precio_unitario
+                'precio_total': movimiento.cantidad * repuesto.precio_venta
             }
         }), 201
     except Exception as e:
@@ -903,44 +971,90 @@ def cambiar_estado(id):
         if 'estado' not in data:
             return jsonify({'error': 'El campo estado es requerido'}), 400
             
-        # Validar transición de estado
+        nuevo_estado = data['estado']
+        comentario = data.get('comentario', 'Cambio de estado')
+        
+        # Validar que el nuevo estado sea válido
+        if nuevo_estado not in Servicio.ESTADOS:
+            return jsonify({'error': f'Estado "{nuevo_estado}" no válido. Estados disponibles: {list(Servicio.ESTADOS.keys())}'}), 400
+        
+        # Validar la transición de estado
         estados_validos = {
-            'pendiente': ['en_diagnostico', 'cancelado'],
-            'en_diagnostico': ['en_reparacion', 'cancelado'],
-            'en_reparacion': ['en_revision', 'cancelado'],
-            'en_revision': ['completado', 'en_reparacion'],
-            'completado': [],
-            'cancelado': []
+            'pendiente': ['diagnostico', 'en_progreso', 'cancelado'],  # Permitir transición directa a en_progreso
+            'diagnostico': ['en_progreso', 'pendiente', 'completado', 'cancelado'],  # Más flexibilidad
+            'en_progreso': ['pausado', 'completado', 'cancelado', 'diagnostico'],  # Permitir volver a diagnóstico
+            'pausado': ['en_progreso', 'completado', 'cancelado'],  # Permitir completar directo
+            'completado': ['en_progreso', 'diagnostico'],  # Permitir reabrir
+            'cancelado': ['pendiente']  # Permitir reactivar
         }
         
-        if servicio.estado not in estados_validos:
-            return jsonify({'error': 'Estado actual inválido'}), 400
-            
-        if data['estado'] not in estados_validos[servicio.estado]:
-            return jsonify({'error': 'Transición de estado no permitida'}), 400
+        if nuevo_estado not in estados_validos.get(servicio.estado, []):
+            return jsonify({
+                'error': f'No se permite cambiar de "{servicio.estado}" a "{nuevo_estado}".',
+                'transiciones_permitidas': estados_validos.get(servicio.estado, [])
+            }), 400
         
-        # Registrar cambio de estado
-        servicio.registrar_cambio_estado(
-            data['estado'],
-            data.get('comentario', 'Cambio de estado')
+        print(f"Cambiando estado del servicio {id} de '{servicio.estado}' a '{nuevo_estado}'")
+        
+        # Guardar el estado anterior para el historial
+        estado_anterior = servicio.estado
+        fecha_cambio = datetime.utcnow()
+        
+        # Crear manualmente el historial de estado
+        historial = HistorialEstado(
+            servicio_id=servicio.id,
+            estado_anterior=estado_anterior,
+            estado_nuevo=nuevo_estado,
+            comentario=comentario,
+            fecha=fecha_cambio,
+            usuario_id=usuario_id
         )
         
-        # Actualizar fecha de fin si se completa
-        if data['estado'] == 'completado':
-            servicio.fecha_fin = datetime.now()
+        # Actualizar el estado del servicio
+        servicio.estado = nuevo_estado
         
-        db.session.commit()
+        # Actualizar fechas según el estado
+        if nuevo_estado == 'completado':
+            servicio.fecha_fin = fecha_cambio
+        # Si se reactiva un servicio completado, eliminar fecha_fin
+        elif estado_anterior == 'completado' and nuevo_estado != 'completado':
+            servicio.fecha_fin = None
         
+        # Añadir el historial y confirmar cambios
+        db.session.add(historial)
+        
+        # Asegurarse de que se haga commit y manejar errores específicamente
+        try:
+            db.session.commit()
+            print(f"✅ Estado del servicio {id} actualizado correctamente a '{nuevo_estado}'")
+        except Exception as commit_error:
+            db.session.rollback()
+            print(f"❌ Error al hacer commit: {str(commit_error)}")
+            return jsonify({'error': f'Error al guardar los cambios: {str(commit_error)}'}), 500
+        
+        # Devolver respuesta con datos completos
         return jsonify({
             'mensaje': 'Estado actualizado exitosamente',
             'servicio': {
                 'id': servicio.id,
-                'estado': servicio.estado,
-                'fecha_fin': servicio.fecha_fin.isoformat() if servicio.fecha_fin else None
+                'tipo_servicio': servicio.tipo_servicio,
+                'descripcion': servicio.descripcion,
+                'estado_anterior': estado_anterior,
+                'estado_nuevo': servicio.estado,
+                'fecha_actualizacion': fecha_cambio.isoformat(),
+                'fecha_fin': servicio.fecha_fin.isoformat() if servicio.fecha_fin else None,
+                'historial_reciente': {
+                    'id': historial.id,
+                    'estado_anterior': historial.estado_anterior,
+                    'estado_nuevo': historial.estado_nuevo,
+                    'comentario': historial.comentario,
+                    'fecha': historial.fecha.isoformat()
+                }
             }
         }), 200
     except Exception as e:
         db.session.rollback()
+        print(f"❌ Error al cambiar estado: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # Obtener historial de estados
@@ -950,19 +1064,34 @@ def obtener_historial(id):
     try:
         servicio = Servicio.query.get_or_404(id)
         
-        return jsonify({
-            'servicio_id': servicio.id,
-            'estado_actual': servicio.estado,
-            'historial': [{
+        historial_items = servicio.historial_estados.order_by(HistorialEstado.fecha.desc()).all()
+        
+        historial_formateado = []
+        for h in historial_items:
+            # Obtener información del usuario que hizo el cambio
+            usuario_nombre = None
+            if h.usuario_id:
+                usuario = Usuario.query.get(h.usuario_id)
+                if usuario:
+                    usuario_nombre = f"{usuario.nombre} {usuario.apellido}" if usuario.apellido else usuario.nombre
+            
+            historial_formateado.append({
                 'id': h.id,
                 'estado_anterior': h.estado_anterior,
                 'estado_nuevo': h.estado_nuevo,
                 'comentario': h.comentario,
                 'fecha': h.fecha.isoformat(),
-                'usuario': h.usuario.nombre if h.usuario else None
-            } for h in servicio.historial_estados.order_by(HistorialEstado.fecha.desc())]
+                'usuario': usuario_nombre,
+                'usuario_id': h.usuario_id
+            })
+        
+        return jsonify({
+            'servicio_id': servicio.id,
+            'estado_actual': servicio.estado,
+            'historial': historial_formateado
         }), 200
     except Exception as e:
+        print(f"❌ Error al obtener historial: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # Obtener estados disponibles
@@ -1005,4 +1134,88 @@ def obtener_estados():
         
         return jsonify(estados), 200
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Obtener estadísticas de servicios
+@servicios_bp.route('/estadisticas', methods=['GET'])
+@jwt_required()
+def get_estadisticas_servicios():
+    try:
+        # Servicios por estado
+        servicios_por_estado = {}
+        for estado in Servicio.ESTADOS.keys():
+            count = Servicio.query.filter_by(estado=estado).count()
+            servicios_por_estado[estado] = count
+        
+        # Servicios del mes actual
+        inicio_mes = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        servicios_mes = Servicio.query.filter(Servicio.fecha_inicio >= inicio_mes).count()
+        
+        # Ingresos del mes (solo servicios completados)
+        ingresos_mes = db.session.query(db.func.sum(Servicio.costo_real)).filter(
+            Servicio.estado == 'completado',
+            Servicio.fecha_fin >= inicio_mes
+        ).scalar() or 0
+        
+        # Top 5 mecánicos por servicios completados
+        top_mecanicos = db.session.query(
+            Mecanico,
+            db.func.count(Servicio.id).label('servicios_completados')
+        ).join(Servicio).filter(
+            Servicio.estado == 'completado'
+        ).group_by(Mecanico.id).order_by(
+            db.func.count(Servicio.id).desc()
+        ).limit(5).all()
+        
+        return jsonify({
+            'servicios_por_estado': servicios_por_estado,
+            'servicios_mes': servicios_mes,
+            'ingresos_mes': ingresos_mes,
+            'top_mecanicos': [{
+                'id': mecanico.id,
+                'nombre': f"{mecanico.nombre} {mecanico.apellido}",
+                'servicios_completados': count
+            } for mecanico, count in top_mecanicos]
+        }), 200
+        
+    except Exception as e:
+        print(f"Error en get_estadisticas_servicios: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# Buscar servicios
+@servicios_bp.route('/buscar', methods=['GET'])
+@jwt_required()
+def buscar_servicios():
+    try:
+        query_text = request.args.get('q', '').strip()
+        
+        if not query_text:
+            return jsonify({'servicios': []}), 200
+        
+        # Buscar en múltiples campos
+        servicios = Servicio.query.join(Cliente).join(Vehiculo).filter(
+            or_(
+                Servicio.tipo_servicio.ilike(f'%{query_text}%'),
+                Servicio.descripcion.ilike(f'%{query_text}%'),
+                Cliente.nombre.ilike(f'%{query_text}%'),
+                Cliente.apellido.ilike(f'%{query_text}%'),
+                Vehiculo.placa.ilike(f'%{query_text}%'),
+                Vehiculo.marca.ilike(f'%{query_text}%'),
+                Vehiculo.modelo.ilike(f'%{query_text}%')
+            )
+        ).order_by(Servicio.fecha_inicio.desc()).limit(20).all()
+        
+        return jsonify({
+            'servicios': [{
+                'id': s.id,
+                'tipo_servicio': s.tipo_servicio,
+                'estado': s.estado,
+                'fecha_inicio': s.fecha_inicio.isoformat(),
+                'cliente': f"{s.cliente.nombre} {s.cliente.apellido}",
+                'vehiculo': f"{s.vehiculo.marca} {s.vehiculo.modelo} - {s.vehiculo.placa}"
+            } for s in servicios]
+        }), 200
+        
+    except Exception as e:
+        print(f"Error en buscar_servicios: {str(e)}")
         return jsonify({'error': str(e)}), 500 

@@ -28,12 +28,11 @@ import {
   Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
-import { useAuth } from '../contexts/AuthContext';
-
-const API_URL = 'http://localhost:5000';
+import { useAuth } from '../context/AuthContext';
+import { getEstadisticas } from '../services/api';
 
 const Dashboard = () => {
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [stats, setStats] = useState({
@@ -54,33 +53,10 @@ const Dashboard = () => {
 
   const cargarEstadisticas = async () => {
     try {
-      if (!token) {
-        throw new Error('No hay token de autenticación');
-      }
-
       setLoading(true);
       setError('');
 
-      const response = await fetch(`${API_URL}/api/dashboard`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        mode: 'cors',
-        credentials: 'include'
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('Sesión expirada. Por favor, inicie sesión nuevamente.');
-        }
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Error ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      const data = await getEstadisticas();
       setStats(data);
     } catch (error) {
       console.error('Error:', error);
@@ -91,37 +67,8 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    if (token) {
-      cargarEstadisticas();
-    }
-  }, [token]);
-
-  const cargarDatosPrueba = async () => {
-    try {
-      setLoading(true);
-      setError('');
-
-      const response = await fetch(`${API_URL}/api/test-data`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        credentials: 'include'
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al cargar datos de prueba');
-      }
-
-      await cargarEstadisticas();
-    } catch (error) {
-      setError(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    cargarEstadisticas();
+  }, []);
 
   const StatCard = ({ title, value, icon, color }) => (
     <Card>
@@ -182,14 +129,6 @@ const Dashboard = () => {
           Bienvenido, {user?.nombre || 'Usuario'}
         </Typography>
         <Box>
-          <Button
-            variant="outlined"
-            onClick={cargarDatosPrueba}
-            sx={{ mr: 2 }}
-            disabled={loading}
-          >
-            Cargar Datos de Prueba
-          </Button>
           <IconButton onClick={cargarEstadisticas} disabled={loading}>
             <RefreshIcon />
           </IconButton>

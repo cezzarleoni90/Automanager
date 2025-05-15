@@ -49,7 +49,7 @@ import {
   AdminPanelSettings as AdminIcon,
   Person as PersonIcon,
 } from '@mui/icons-material';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../context/AuthContext';
 
 // Definir la URL base de la API
 const API_URL = 'http://localhost:5000';

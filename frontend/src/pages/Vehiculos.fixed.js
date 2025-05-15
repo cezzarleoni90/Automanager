@@ -109,26 +109,14 @@ function Vehiculos() {
       const data = await getVehiculos();
       console.log('Datos de vehículos cargados:', data);
       
-      // Corregir cómo se procesan los servicios para cada vehículo
-      const vehiculosConServicios = (data.vehiculos || []).map(vehiculo => {
-        // Verificar si el vehículo tiene servicios
-        // Si no tiene, se inicializa como un array vacío
-        const servicios = vehiculo.servicios_recientes || vehiculo.servicios || [];
-        
-        // Contar la cantidad de servicios para cada vehículo
-        const cantidadServicios = servicios.length;
-        
-        console.log(`Vehículo ID ${vehiculo.id} tiene ${cantidadServicios} servicios:`, servicios);
-        
-        return {
-          ...vehiculo,
-          servicios: servicios,
-          totalServicios: cantidadServicios
-        };
-      });
+      // Mapear los vehículos para incluir una propiedad servicios si no existe
+      const vehiculosConServicios = (data.vehiculos || []).map(vehiculo => ({
+        ...vehiculo,
+        servicios: vehiculo.servicios_recientes || vehiculo.servicios || []
+      }));
       
       setVehiculos(vehiculosConServicios);
-      console.log('Vehículos procesados con datos de servicios:', vehiculosConServicios);
+      console.log('Vehículos procesados:', vehiculosConServicios);
     } catch (error) {
       console.error('Error al cargar vehículos:', error);
       setError(error.message || 'Error al cargar los vehículos');
@@ -259,29 +247,12 @@ function Vehiculos() {
   };
 
   const handleAgregarServicio = () => {
-    // Asegurarnos de que tenemos un ID de vehículo válido
-    if (!vehiculoSeleccionado?.id) {
-      setError('No se pudo identificar el vehículo seleccionado');
-      return;
-    }
-    
-    // Convertir el ID a String para evitar problemas de comparación
-    const vehiculoId = String(vehiculoSeleccionado.id);
-    
-    console.log('🚗 Navegando a servicios con vehículo seleccionado:', {
-      id: vehiculoId,
-      marca: vehiculoSeleccionado.marca,
-      modelo: vehiculoSeleccionado.modelo,
-      placa: vehiculoSeleccionado.placa
-    });
-    
     navigate('/servicios', { 
       state: { 
-        vehiculoId: vehiculoId,
+        vehiculoId: vehiculoSeleccionado?.id,
         vehiculoInfo: `${vehiculoSeleccionado?.marca} ${vehiculoSeleccionado?.modelo} (${vehiculoSeleccionado?.placa})`
       } 
     });
-    
     handleCloseServiciosDialog();
   };
 
@@ -297,24 +268,15 @@ function Vehiculos() {
         throw new Error('No se pudo cargar la información del vehículo');
       }
       
-      // Asegurarse de que servicios_recientes existe y está formateado correctamente
-      const serviciosFormateados = (data.servicios_recientes || []).map(servicio => ({
-        ...servicio,
-        id: servicio.id,
-        tipo_servicio: servicio.tipo || servicio.tipo_servicio || 'Sin definir',
-        descripcion: servicio.descripcion || 'Sin descripción',
-        estado: servicio.estado || 'pendiente',
-        mecanico: servicio.mecanico || null,
-        fecha_inicio: servicio.fecha_inicio || new Date().toISOString()
-      }));
-      
-      console.log('Servicios formateados del vehículo:', serviciosFormateados);
-      
-      // Actualizar el estado del vehículo seleccionado
+      // Actualizar el estado del vehículo seleccionado con formato adecuado para los servicios
       setVehiculoSeleccionado({
         ...data,
-        servicios: serviciosFormateados,
-        totalServicios: serviciosFormateados.length
+        servicios: (data.servicios_recientes || []).map(servicio => ({
+          ...servicio,
+          tipo: servicio.tipo || servicio.tipo_servicio || 'Sin definir',
+          descripcion: servicio.descripcion || 'Sin descripción',
+          estado: servicio.estado || 'pendiente'
+        }))
       });
       
       setOpenServiciosDialog(true);
@@ -406,7 +368,7 @@ function Vehiculos() {
                 <TableCell>
                   <Chip
                     icon={<BuildIcon />}
-                    label={`${vehiculo.totalServicios || vehiculo.servicios?.length || 0} servicios`}
+                    label={`${vehiculo.servicios?.length || 0} servicios`}
                     onClick={() => handleVerServicios(vehiculo)}
                     color="secondary"
                     variant="outlined"
@@ -666,7 +628,7 @@ function Vehiculos() {
                     <TableBody>
                       {vehiculoSeleccionado.servicios.map((servicio) => (
                         <TableRow key={servicio.id}>
-                          <TableCell>{servicio.tipo_servicio || 'Sin definir'}</TableCell>
+                          <TableCell>{servicio.tipo || servicio.tipo_servicio || 'Sin definir'}</TableCell>
                           <TableCell>
                             <Tooltip title={servicio.descripcion || 'Sin descripción'}>
                               <Typography noWrap sx={{ maxWidth: 200 }}>
@@ -689,11 +651,9 @@ function Vehiculos() {
                             />
                           </TableCell>
                           <TableCell>
-                            {servicio.mecanico ? (
-                              typeof servicio.mecanico === 'object' 
-                                ? servicio.mecanico.nombre || `${servicio.mecanico.nombre || ''} ${servicio.mecanico.apellido || ''}` 
-                                : servicio.mecanico
-                            ) : 'Sin asignar'}
+                            {servicio.mecanico && typeof servicio.mecanico === 'object' 
+                              ? servicio.mecanico.nombre 
+                              : (typeof servicio.mecanico === 'string' ? servicio.mecanico : 'Sin asignar')}
                           </TableCell>
                           <TableCell>
                             <IconButton 
@@ -754,4 +714,4 @@ function Vehiculos() {
   );
 }
 
-export default Vehiculos;
+export default Vehiculos; 
