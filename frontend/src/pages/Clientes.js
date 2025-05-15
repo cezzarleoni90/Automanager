@@ -37,6 +37,7 @@ import {
   Email as EmailIcon,
   DirectionsCar as CarIcon,
   Visibility as VisibilityIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -60,6 +61,8 @@ function Clientes() {
   const [busqueda, setBusqueda] = useState('');
   const [openVehiculosDialog, setOpenVehiculosDialog] = useState(false);
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
+  const [dialogoClienteAbierto, setDialogoClienteAbierto] = useState(false);
+  const [clienteDetalle, setClienteDetalle] = useState(null);
 
   useEffect(() => {
     cargarClientes();
@@ -78,7 +81,8 @@ function Clientes() {
 
   const handleOpenDialog = (cliente = null) => {
     if (cliente) {
-      setClienteActual(cliente);
+      setClienteDetalle(cliente);
+      setDialogoClienteAbierto(true);
     } else {
       setClienteActual({
         nombre: '',
@@ -87,8 +91,8 @@ function Clientes() {
         telefono: '',
         direccion: '',
       });
+      setOpenDialog(true);
     }
-    setOpenDialog(true);
   };
 
   const handleCloseDialog = () => {
@@ -349,6 +353,254 @@ function Clientes() {
             Agregar vehículo
           </Button>
           <Button onClick={handleCloseVehiculosDialog}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal de detalles del cliente */}
+      <Dialog 
+        open={dialogoClienteAbierto} 
+        onClose={() => setDialogoClienteAbierto(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', px: 2, py: 1.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">
+              Detalles del Cliente
+            </Typography>
+            <IconButton 
+              color="inherit" 
+              onClick={() => setDialogoClienteAbierto(false)}
+              aria-label="cerrar diálogo"
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        
+        <DialogContent dividers sx={{ p: 3 }}>
+          {clienteDetalle && (
+            <Grid container spacing={3}>
+              {/* Información del Cliente */}
+              <Grid item xs={12} md={6}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+                    Información Personal
+                  </Typography>
+                  <Box sx={{ mt: 2 }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Nombre:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">
+                          {clienteDetalle.nombre} {clienteDetalle.apellido}
+                        </Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Email:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{clienteDetalle.email}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Teléfono:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{clienteDetalle.telefono}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Dirección:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{clienteDetalle.direccion || 'No disponible'}</Typography>
+                      </Grid>
+                    </Grid>
+                  </Box>
+                </Paper>
+              </Grid>
+              
+              {/* Resumen de Vehículos */}
+              <Grid item xs={12} md={6}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+                    Resumen de Vehículos
+                  </Typography>
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle1" gutterBottom>
+                      Total de vehículos: {clienteDetalle.vehiculos?.length || 0}
+                    </Typography>
+                    {clienteDetalle.vehiculos && clienteDetalle.vehiculos.length > 0 ? (
+                      <List>
+                        {clienteDetalle.vehiculos.map((vehiculo) => (
+                          <ListItem 
+                            key={vehiculo.id}
+                            sx={{
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              borderRadius: 1,
+                              mb: 1,
+                              '&:hover': {
+                                backgroundColor: 'action.hover'
+                              }
+                            }}
+                          >
+                            <ListItemText
+                              primary={
+                                <Typography variant="subtitle1">
+                                  {vehiculo.marca} {vehiculo.modelo} ({vehiculo.año})
+                                </Typography>
+                              }
+                              secondary={
+                                <Typography variant="body2" color="text.secondary">
+                                  Placa: {vehiculo.placa}
+                                </Typography>
+                              }
+                            />
+                            <ListItemSecondaryAction>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={() => handleIrAVehiculo(vehiculo.id)}
+                                startIcon={<VisibilityIcon />}
+                              >
+                                Ver detalles
+                              </Button>
+                            </ListItemSecondaryAction>
+                          </ListItem>
+                        ))}
+                      </List>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No hay vehículos registrados
+                      </Typography>
+                    )}
+                  </Box>
+                </Paper>
+              </Grid>
+              
+              {/* Historial de Servicios */}
+              <Grid item xs={12}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+                    Historial de Servicios
+                  </Typography>
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Fecha</TableCell>
+                          <TableCell>Vehículo</TableCell>
+                          <TableCell>Tipo</TableCell>
+                          <TableCell>Estado</TableCell>
+                          <TableCell>Mecánico</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {clienteDetalle.vehiculos?.flatMap(vehiculo => 
+                          vehiculo.servicios?.map(servicio => (
+                            <TableRow key={servicio.id}>
+                              <TableCell>
+                                {new Date(servicio.fecha_inicio).toLocaleDateString()}
+                              </TableCell>
+                              <TableCell>
+                                {vehiculo.marca} {vehiculo.modelo} ({vehiculo.placa})
+                              </TableCell>
+                              <TableCell>{servicio.tipo_servicio}</TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={formatEstadoLabel(servicio.estado)}
+                                  color={
+                                    servicio.estado === 'completado' ? 'success' :
+                                    servicio.estado === 'en_progreso' ? 'warning' :
+                                    servicio.estado === 'diagnostico' ? 'info' :
+                                    servicio.estado === 'pausado' ? 'secondary' :
+                                    servicio.estado === 'cancelado' ? 'error' : 
+                                    'primary'
+                                  }
+                                  size="small"
+                                  sx={{ 
+                                    fontWeight: 'medium',
+                                    '&.MuiChip-colorSuccess': {
+                                      bgcolor: '#4CAF50',
+                                      color: 'white'
+                                    },
+                                    '&.MuiChip-colorWarning': {
+                                      bgcolor: '#FF9800',
+                                      color: 'white'
+                                    },
+                                    '&.MuiChip-colorInfo': {
+                                      bgcolor: '#2196F3',
+                                      color: 'white'
+                                    },
+                                    '&.MuiChip-colorSecondary': {
+                                      bgcolor: '#9C27B0',
+                                      color: 'white'
+                                    },
+                                    '&.MuiChip-colorError': {
+                                      bgcolor: '#F44336',
+                                      color: 'white'
+                                    },
+                                    '&.MuiChip-colorPrimary': {
+                                      bgcolor: '#3F51B5',
+                                      color: 'white'
+                                    }
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                {servicio.mecanico ? 
+                                  `${servicio.mecanico.nombre} ${servicio.mecanico.apellido}` : 
+                                  'Sin asignar'}
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) || []}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Paper>
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button 
+            onClick={() => setDialogoClienteAbierto(false)} 
+            color="inherit"
+          >
+            Cerrar
+          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button 
+              variant="contained" 
+              color="primary"
+              onClick={() => {
+                setDialogoClienteAbierto(false);
+                handleOpenDialog(clienteDetalle);
+              }}
+              startIcon={<EditIcon />}
+            >
+              Editar
+            </Button>
+            <Button 
+              variant="contained" 
+              color="error"
+              onClick={() => {
+                if (window.confirm('¿Está seguro de eliminar este cliente?')) {
+                  handleDelete(clienteDetalle.id);
+                  setDialogoClienteAbierto(false);
+                }
+              }}
+              startIcon={<DeleteIcon />}
+            >
+              Eliminar
+            </Button>
+          </Box>
         </DialogActions>
       </Dialog>
 

@@ -110,6 +110,9 @@ function Servicios() {
   const [dialogoDetalleAbierto, setDialogoDetalleAbierto] = useState(false);
   const [servicioSeleccionado, setServicioSeleccionado] = useState(null);
   const [pestanaActiva, setPestanaActiva] = useState('detalles'); // 'detalles', 'repuestos', 'historial', 'estado'
+  // Agregar nuevo estado para la modal de vehículo
+  const [dialogoVehiculoAbierto, setDialogoVehiculoAbierto] = useState(false);
+  const [vehiculoDetalle, setVehiculoDetalle] = useState(null);
 
   const tiposServicio = [
     { value: 'mantenimiento', label: 'Mantenimiento' },
@@ -375,11 +378,13 @@ function Servicios() {
       window.history.replaceState({}, document.title, '/servicios');
     }
     
-    // Reset del formulario
+    // Reset del formulario con un pequeño delay
     setTimeout(() => {
       setServicioActual(servicioVacio);
       setVehiculoSeleccionado(null);
-    }, 200); // Pequeño delay para evitar problemas con animación de cierre
+      // Recargar los servicios para asegurar datos actualizados
+      cargarServicios();
+    }, 200);
   };
 
   const handleInputChange = (e) => {
@@ -402,31 +407,25 @@ function Servicios() {
         throw new Error('El tipo de servicio es obligatorio');
       }
       
-      // Verificar si tenemos un vehículo seleccionado desde la vista de vehículos
+      // Verificar si tenemos un vehículo seleccionado
       const vehiculo_id = servicioActual.vehiculo_id || vehiculoSeleccionado?.id;
-      
-      console.log('🔍 Verificando vehículo para servicio:', {
-        'servicioActual.vehiculo_id': servicioActual.vehiculo_id,
-        'vehiculoSeleccionado?.id': vehiculoSeleccionado?.id,
-        'vehiculo_id final': vehiculo_id
-      });
       
       if (!vehiculo_id) {
         throw new Error('Debe seleccionar un vehículo para el servicio');
       }
 
-      // Crear copia para evitar modificar el estado directo
+      // Formatear fechas
       const fechaInicio = servicioActual.fecha_inicio 
         ? servicioActual.fecha_inicio.includes('T') 
-          ? servicioActual.fecha_inicio // Ya está en formato ISO
-          : `${servicioActual.fecha_inicio}T00:00:00.000Z` // Convertir YYYY-MM-DD a ISO
-        : new Date().toISOString();
+          ? servicioActual.fecha_inicio 
+          : `${servicioActual.fecha_inicio}T00:00:00.000Z`
+      : new Date().toISOString();
       
       const fechaFin = servicioActual.fecha_fin 
         ? servicioActual.fecha_fin.includes('T') 
           ? servicioActual.fecha_fin 
           : `${servicioActual.fecha_fin}T23:59:59.999Z`
-        : null;
+      : null;
       
       // Capturar el estado actual para comparar después
       const estadoAnterior = servicioActual.estado;
@@ -436,94 +435,40 @@ function Servicios() {
         ...servicioActual,
         fecha_inicio: fechaInicio,
         fecha_fin: fechaFin,
-        // Asegurar que los IDs se envían como números if posible
-        // Usar el vehiculo_id verificado anteriormente
         vehiculo_id: parseInt(vehiculo_id),
         mecanico_id: servicioActual.mecanico_id ? parseInt(servicioActual.mecanico_id) : null,
-        // Para cambio de estado, agregar un comentario si cambió
         comentario: servicioActual.estado !== estadoAnterior ? 
           `Estado cambiado de ${estadoAnterior} a ${servicioActual.estado} desde formulario de edición` : undefined
       };
 
-      console.log('💾 Iniciando guardado de servicio...', JSON.stringify(servicioData));
       let resultado;
       
       if (servicioActual.id) {
-        // Actualizar servicio existente (incluye cambio de estado automáticamente)
-        console.log('🔄 Actualizando servicio existente ID:', servicioActual.id);
+        // Actualizar servicio existente
         resultado = await updateServicio(servicioActual.id, servicioData);
         
-        console.log('📦 Respuesta del servidor:', resultado);
-        
-        // Si hay un cambio de estado, registrar en consola para debugging
+        // Si hay un cambio de estado, registrar en el historial
         if (estadoAnterior !== servicioActual.estado) {
-          console.log(`✅ Estado actualizado: ${estadoAnterior} → ${servicioActual.estado}`);
+          await cambiarEstado(servicioActual.id, {
+            estado: servicioActual.estado,
+            comentario: `Cambio de estado desde edición: ${estadoAnterior} → ${servicioActual.estado}`
+          });
         }
       } else {
         // Crear nuevo servicio
-        console.log('🔄 Creando nuevo servicio con datos:', servicioData);
         resultado = await createServicio(servicioData);
-        console.log('📦 Respuesta del servidor:', resultado);
       }
 
       setSuccess(`Servicio ${servicioActual.id ? 'actualizado' : 'creado'} exitosamente`);
       
-      // Si hay un servicio actualmente seleccionado, recargar sus datos
-      // para mostrar la actualización en la interfaz
-      if (servicioActual.id) {
-        try {
-          console.log('🔄 Recargando datos del servicio actualizado...');
-          const servicioActualizado = await getServicio(servicioActual.id);
-          console.log('📦 Servicio actualizado recibido:', servicioActualizado);
-          
-          // Actualizar el estado local con el dato fresco del servidor
-          setServicioActual(prevState => ({
-            ...prevState,
-            ...servicioActualizado,
-            estado: servicioActualizado.estado, // Asegurar que el estado se actualiza
-            vehiculo_id: String(servicioActualizado.vehiculo_id || ''),
-            mecanico_id: servicioActualizado.mecanico_id ? String(servicioActualizado.mecanico_id) : ''
-          }));
-          
-          // También actualizar la lista de servicios para reflejar inmediatamente el cambio
-          setServicios(prevServicios => 
-            prevServicios.map(s => 
-              s.id === servicioActual.id 
-                ? { 
-                    ...s, 
-                    ...servicioActualizado,
-                    // Asegurar que estos campos se actualizan correctamente
-                    estado: servicioActualizado.estado,
-                    tipo_servicio: servicioActualizado.tipo_servicio
-                  } 
-                : s
-            )
-          );
-          
-          // Recargar también el historial si hubo cambio de estado
-          if (estadoAnterior !== servicioActual.estado) {
-            cargarHistorial(servicioActual.id);
-          }
-        } catch (reloadError) {
-          console.error('❌ Error al recargar datos del servicio:', reloadError);
-          // No mostrar este error al usuario, solo logearlo
-        }
-      }
-            
-      // Solo cerrar el diálogo después de recargar datos
+      // Recargar datos
+      await cargarServicios();
+      
+      // Cerrar el diálogo
       handleCloseDialog();
       
-      // Limpiar la URL después de guardar
-      if (window.location.search.includes('servicio=')) {
-        window.history.replaceState({}, document.title, '/servicios');
-      }
-      
-      // Recargar datos para asegurar sincronización completa
-      await cargarServicios();
-      await cargarVehiculos(); // Recargar también los vehículos para actualizar la lista
-      console.log('✅ Proceso de guardado completado');
     } catch (error) {
-      console.error('❌ Error al guardar servicio:', error);
+      console.error('Error al guardar servicio:', error);
       setError(error.message || error.response?.data?.error || 'Error al guardar el servicio');
     } finally {
       setLoading(false);
@@ -549,7 +494,11 @@ function Servicios() {
   };
 
   const handleIrAVehiculo = (vehiculoId) => {
-    navigate(`/vehiculos?vehiculo=${vehiculoId}`);
+    const vehiculo = vehiculos.find(v => v.id === vehiculoId);
+    if (vehiculo) {
+      setVehiculoDetalle(vehiculo);
+      setDialogoVehiculoAbierto(true);
+    }
   };
 
   const handleIrAMecanico = (mecanicoId) => {
@@ -1002,13 +951,40 @@ function Servicios() {
                     label={formatEstadoLabel(servicio.estado)}
                     color={
                       servicio.estado === 'completado' ? 'success' :
-                      servicio.estado === 'en_progreso' || servicio.estado === 'diagnostico' ? 'warning' :
-                      servicio.estado === 'pausado' ? 'info' :
+                      servicio.estado === 'en_progreso' ? 'warning' :
+                      servicio.estado === 'diagnostico' ? 'info' :
+                      servicio.estado === 'pausado' ? 'secondary' :
                       servicio.estado === 'cancelado' ? 'error' : 
                       'primary'
                     }
                     size="small"
-                    sx={{ fontWeight: 'medium' }}
+                    sx={{ 
+                      fontWeight: 'medium',
+                      '&.MuiChip-colorSuccess': {
+                        bgcolor: '#4CAF50',
+                        color: 'white'
+                      },
+                      '&.MuiChip-colorWarning': {
+                        bgcolor: '#FF9800',
+                        color: 'white'
+                      },
+                      '&.MuiChip-colorInfo': {
+                        bgcolor: '#2196F3',
+                        color: 'white'
+                      },
+                      '&.MuiChip-colorSecondary': {
+                        bgcolor: '#9C27B0',
+                        color: 'white'
+                      },
+                      '&.MuiChip-colorError': {
+                        bgcolor: '#F44336',
+                        color: 'white'
+                      },
+                      '&.MuiChip-colorPrimary': {
+                        bgcolor: '#3F51B5',
+                        color: 'white'
+                      }
+                    }}
                   />
                 </TableCell>
                 <TableCell>
@@ -1024,16 +1000,6 @@ function Servicios() {
                         color="primary"
                       >
                         <VisibilityIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Editar">
-                      <IconButton onClick={() => handleOpenDialog(servicio)}>
-                        <EditIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Eliminar">
-                      <IconButton onClick={() => handleDelete(servicio.id)}>
-                        <DeleteIcon />
                       </IconButton>
                     </Tooltip>
                   </Box>
@@ -1059,8 +1025,8 @@ function Servicios() {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                bgcolor: 'primary.light',
-                color: 'primary.contrastText',
+                bgcolor: '#3F51B5',
+                color: 'white',
                 borderRadius: 2
               }}
             >
@@ -1079,8 +1045,8 @@ function Servicios() {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                bgcolor: 'info.light',
-                color: 'info.contrastText',
+                bgcolor: '#2196F3',
+                color: 'white',
                 borderRadius: 2
               }}
             >
@@ -1099,8 +1065,8 @@ function Servicios() {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                bgcolor: 'warning.light',
-                color: 'warning.contrastText',
+                bgcolor: '#FF9800',
+                color: 'white',
                 borderRadius: 2
               }}
             >
@@ -1119,8 +1085,8 @@ function Servicios() {
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                bgcolor: 'success.light',
-                color: 'success.contrastText',
+                bgcolor: '#4CAF50',
+                color: 'white',
                 borderRadius: 2
               }}
             >
@@ -1291,6 +1257,33 @@ function Servicios() {
                               'primary'
                             }
                             size="small"
+                            sx={{ 
+                              fontWeight: 'medium',
+                              '&.MuiChip-colorSuccess': {
+                                bgcolor: '#4CAF50',
+                                color: 'white'
+                              },
+                              '&.MuiChip-colorWarning': {
+                                bgcolor: '#FF9800',
+                                color: 'white'
+                              },
+                              '&.MuiChip-colorInfo': {
+                                bgcolor: '#2196F3',
+                                color: 'white'
+                              },
+                              '&.MuiChip-colorSecondary': {
+                                bgcolor: '#9C27B0',
+                                color: 'white'
+                              },
+                              '&.MuiChip-colorError': {
+                                bgcolor: '#F44336',
+                                color: 'white'
+                              },
+                              '&.MuiChip-colorPrimary': {
+                                bgcolor: '#3F51B5',
+                                color: 'white'
+                              }
+                            }}
                           />
                         </Grid>
                         
@@ -1641,11 +1634,11 @@ function Servicios() {
                           borderRadius: 1,
                           mb: 1,
                           p: 2,
-                          bgcolor: item.estado_nuevo === 'completado' ? 'success.light' : 
-                                  item.estado_nuevo === 'cancelado' ? 'error.light' :
-                                  item.estado_nuevo === 'en_progreso' ? 'warning.light' :
-                                  item.estado_nuevo === 'diagnostico' ? 'info.light' :
-                                  item.estado_nuevo === 'pausado' ? 'grey.200' :
+                          bgcolor: item.estado_nuevo === 'completado' ? 'rgba(76, 175, 80, 0.1)' : 
+                                  item.estado_nuevo === 'cancelado' ? 'rgba(244, 67, 54, 0.1)' :
+                                  item.estado_nuevo === 'en_progreso' ? 'rgba(255, 152, 0, 0.1)' :
+                                  item.estado_nuevo === 'diagnostico' ? 'rgba(33, 150, 243, 0.1)' :
+                                  item.estado_nuevo === 'pausado' ? 'rgba(156, 39, 176, 0.1)' :
                                   'background.paper'
                         }}
                       >
@@ -1796,17 +1789,49 @@ function Servicios() {
           >
             Cerrar
           </Button>
-          <Button 
-            variant="contained" 
-            color="primary"
-            onClick={() => {
-              handleOpenDialog(servicioSeleccionado);
-              setDialogoDetalleAbierto(false);
-            }}
-            startIcon={<EditIcon />}
-          >
-            Editar Servicio
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button 
+              variant="contained" 
+              color="primary"
+              onClick={() => {
+                // Preparar los datos del servicio para edición
+                const servicioParaEditar = {
+                  ...servicioSeleccionado,
+                  vehiculo_id: servicioSeleccionado.vehiculo_id || 
+                              (servicioSeleccionado.vehiculo ? servicioSeleccionado.vehiculo.id : ''),
+                  mecanico_id: servicioSeleccionado.mecanico_id || 
+                              (servicioSeleccionado.mecanico ? servicioSeleccionado.mecanico.id : ''),
+                  fecha_inicio: formatDate(servicioSeleccionado.fecha_inicio),
+                  fecha_fin: formatDate(servicioSeleccionado.fecha_fin)
+                };
+                
+                // Cerrar el modal de detalles
+                setDialogoDetalleAbierto(false);
+                
+                // Pequeño delay para asegurar que el modal de detalles se cierre antes de abrir el de edición
+                setTimeout(() => {
+                  setServicioActual(servicioParaEditar);
+                  setOpenDialog(true);
+                }, 100);
+              }}
+              startIcon={<EditIcon />}
+            >
+              Editar
+            </Button>
+            <Button 
+              variant="contained" 
+              color="error"
+              onClick={() => {
+                if (window.confirm('¿Está seguro de eliminar este servicio?')) {
+                  handleDelete(servicioSeleccionado.id);
+                  setDialogoDetalleAbierto(false);
+                }
+              }}
+              startIcon={<DeleteIcon />}
+            >
+              Eliminar
+            </Button>
+          </Box>
         </DialogActions>
       </Dialog>
 
@@ -2048,6 +2073,228 @@ function Servicios() {
           {error || success}
         </Alert>
       </Snackbar>
+
+      {/* Modal de detalles del vehículo */}
+      <Dialog 
+        open={dialogoVehiculoAbierto} 
+        onClose={() => setDialogoVehiculoAbierto(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', px: 2, py: 1.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">
+              Detalles del Vehículo
+            </Typography>
+            <IconButton 
+              color="inherit" 
+              onClick={() => setDialogoVehiculoAbierto(false)}
+              aria-label="cerrar diálogo"
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        
+        <DialogContent dividers sx={{ p: 3 }}>
+          {vehiculoDetalle && (
+            <Grid container spacing={3}>
+              {/* Información del Vehículo */}
+              <Grid item xs={12} md={6}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+                    Información del Vehículo
+                  </Typography>
+                  <Box sx={{ mt: 2 }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Marca:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{vehiculoDetalle.marca}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Modelo:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{vehiculoDetalle.modelo}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Placa:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{vehiculoDetalle.placa}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Año:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{vehiculoDetalle.año || 'No disponible'}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Color:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{vehiculoDetalle.color || 'No disponible'}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">VIN:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{vehiculoDetalle.vin || 'No disponible'}</Typography>
+                      </Grid>
+                    </Grid>
+                  </Box>
+                </Paper>
+              </Grid>
+              
+              {/* Información del Cliente */}
+              <Grid item xs={12} md={6}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+                    Información del Propietario
+                  </Typography>
+                  {vehiculoDetalle.cliente ? (
+                    <Box sx={{ mt: 2 }}>
+                      <Grid container spacing={2}>
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Nombre:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {vehiculoDetalle.cliente.nombre} {vehiculoDetalle.cliente.apellido}
+                          </Typography>
+                        </Grid>
+                        
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Teléfono:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">{vehiculoDetalle.cliente.telefono || 'No disponible'}</Typography>
+                        </Grid>
+                        
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Email:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">{vehiculoDetalle.cliente.email || 'No disponible'}</Typography>
+                        </Grid>
+                        
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Dirección:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">{vehiculoDetalle.cliente.direccion || 'No disponible'}</Typography>
+                        </Grid>
+                      </Grid>
+                    </Box>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                      No hay información del propietario disponible
+                    </Typography>
+                  )}
+                </Paper>
+              </Grid>
+              
+              {/* Historial de Servicios */}
+              <Grid item xs={12}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+                    Historial de Servicios
+                  </Typography>
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Fecha</TableCell>
+                          <TableCell>Tipo</TableCell>
+                          <TableCell>Estado</TableCell>
+                          <TableCell>Mecánico</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {servicios
+                          .filter(s => s.vehiculo_id === vehiculoDetalle.id)
+                          .sort((a, b) => new Date(b.fecha_inicio) - new Date(a.fecha_inicio))
+                          .map((servicio) => (
+                            <TableRow key={servicio.id}>
+                              <TableCell>
+                                {new Date(servicio.fecha_inicio).toLocaleDateString()}
+                              </TableCell>
+                              <TableCell>{servicio.tipo_servicio}</TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={formatEstadoLabel(servicio.estado)}
+                                  color={
+                                    servicio.estado === 'completado' ? 'success' :
+                                    servicio.estado === 'en_progreso' ? 'warning' :
+                                    servicio.estado === 'diagnostico' ? 'info' :
+                                    servicio.estado === 'pausado' ? 'secondary' :
+                                    servicio.estado === 'cancelado' ? 'error' : 
+                                    'primary'
+                                  }
+                                  size="small"
+                                  sx={{ 
+                                    fontWeight: 'medium',
+                                    '&.MuiChip-colorSuccess': {
+                                      bgcolor: '#4CAF50',
+                                      color: 'white'
+                                    },
+                                    '&.MuiChip-colorWarning': {
+                                      bgcolor: '#FF9800',
+                                      color: 'white'
+                                    },
+                                    '&.MuiChip-colorInfo': {
+                                      bgcolor: '#2196F3',
+                                      color: 'white'
+                                    },
+                                    '&.MuiChip-colorSecondary': {
+                                      bgcolor: '#9C27B0',
+                                      color: 'white'
+                                    },
+                                    '&.MuiChip-colorError': {
+                                      bgcolor: '#F44336',
+                                      color: 'white'
+                                    },
+                                    '&.MuiChip-colorPrimary': {
+                                      bgcolor: '#3F51B5',
+                                      color: 'white'
+                                    }
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                {servicio.mecanico_id && mecanicos.find(m => m.id === servicio.mecanico_id) ? (
+                                  `${mecanicos.find(m => m.id === servicio.mecanico_id)?.nombre} ${mecanicos.find(m => m.id === servicio.mecanico_id)?.apellido}`
+                                ) : (
+                                  'Sin asignar'
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Paper>
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button 
+            onClick={() => setDialogoVehiculoAbierto(false)} 
+            color="inherit"
+          >
+            Cerrar
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }
