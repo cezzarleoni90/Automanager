@@ -111,13 +111,36 @@ function Inventario() {
   const [precioCompraInput, setPrecioCompraInput] = useState('');
   const [precioVentaInput, setPrecioVentaInput] = useState('');
 
+  const [openStockDialog, setOpenStockDialog] = useState(false);
+  const [historialMovimientos, setHistorialMovimientos] = useState([]);
+  const [selectedRepuesto, setSelectedRepuesto] = useState(null);
+  const [showRepuestoSelector, setShowRepuestoSelector] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategoria, setSelectedCategoria] = useState('');
+  const [sortConfig, setSortConfig] = useState({ key: 'nombre', direction: 'asc' });
+  const [virtualPage, setVirtualPage] = useState(0);
+  const virtualRowsPerPage = 10;
+  const [isScanningInSelector, setIsScanningInSelector] = useState(false);
+  const selectorVideoRef = useRef(null);
+  const selectorCanvasRef = useRef(null);
+
   const cargarRepuestos = async () => {
     try {
       console.log('🔄 Iniciando carga de repuestos...');
       setIsLoading(true);
       setLoading(true);
       
-      const response = await fetch(`http://localhost:5000/api/inventario/repuestos?page=${page + 1}&per_page=${rowsPerPage}&search=${busqueda}`, {
+      // Construir la URL de búsqueda
+      let searchUrl = `http://localhost:5000/api/inventario/repuestos?page=${page + 1}&per_page=${rowsPerPage}`;
+      
+      // Agregar el término de búsqueda si existe
+      if (busqueda && busqueda.trim() !== '') {
+        searchUrl += `&search=${encodeURIComponent(busqueda.trim())}`;
+      }
+      
+      console.log('🔍 URL de búsqueda:', searchUrl);
+      
+      const response = await fetch(searchUrl, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         }
@@ -130,15 +153,44 @@ function Inventario() {
       const data = await response.json();
       console.log('📦 Repuestos recibidos:', data);
       
-      setRepuestos((data.repuestos || []).map(repuesto => ({
-        ...repuesto,
-        stock: repuesto.stock_actual || repuesto.stock || 0
-      })));
-      setTotalRepuestos(data.total || 0);
+      if (data.repuestos && Array.isArray(data.repuestos)) {
+        // Filtrar los repuestos en el frontend
+        let repuestosFiltrados = data.repuestos;
+        if (busqueda && busqueda.trim() !== '') {
+          const terminoBusqueda = busqueda.trim().toLowerCase();
+          repuestosFiltrados = data.repuestos.filter(repuesto => 
+            repuesto.nombre?.toLowerCase().includes(terminoBusqueda) ||
+            repuesto.codigo?.toLowerCase().includes(terminoBusqueda) ||
+            repuesto.categoria?.toLowerCase().includes(terminoBusqueda) ||
+            repuesto.marca?.toLowerCase().includes(terminoBusqueda) ||
+            repuesto.modelo?.toLowerCase().includes(terminoBusqueda)
+          );
+        }
+
+        setRepuestos(repuestosFiltrados.map(repuesto => ({
+          ...repuesto,
+          stock: repuesto.stock_actual || repuesto.stock || 0
+        })));
+        setTotalRepuestos(repuestosFiltrados.length);
+        
+        // Mostrar mensaje si no hay resultados
+        if (repuestosFiltrados.length === 0 && busqueda) {
+          setError(`No se encontraron repuestos que coincidan con "${busqueda}"`);
+        } else {
+          setError('');
+        }
+      } else {
+        setRepuestos([]);
+        setTotalRepuestos(0);
+        setError('Error en el formato de los datos recibidos');
+      }
+      
       console.log('✅ Repuestos actualizados en estado');
     } catch (error) {
       console.error('❌ Error en cargarRepuestos:', error);
       setError('Error al cargar repuestos');
+      setRepuestos([]);
+      setTotalRepuestos(0);
     } finally {
       setIsLoading(false);
       setLoading(false);
@@ -164,7 +216,7 @@ function Inventario() {
         setPage(0); // Resetear a la primera página
         cargarRepuestos();
       }
-    }, 500);
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [busqueda]);
@@ -188,7 +240,7 @@ function Inventario() {
     }
   };
 
-  // Funciones para escáner
+  // Función para escáner
   const startScanner = async () => {
     setIsScanning(true);
     setOpenScannerDialog(true);
@@ -215,7 +267,7 @@ function Inventario() {
         },
         numOfWorkers: 2,
         decoder: {
-          readers: ["code_128_reader", "ean_reader", "ean_8_reader", "code_39_reader"]
+          readers: ["code_128_reader", "ean_reader", "ean_8_reader", "code_39_reader", "upc_reader", "upc_e_reader"]
         },
         locate: true
       }, (err) => {
@@ -231,17 +283,69 @@ function Inventario() {
       // Escuchar detecciones
       Quagga.onDetected((result) => {
         const code = result.codeResult.code;
-        setRepuestoActual(prev => ({
-          ...prev,
-          codigo: code
-        }));
-        setSuccess(`Código escaneado: ${code}`);
+        console.log('Código detectado:', code);
+        
+        // Buscar el repuesto por código
+        buscarPorCodigo(code);
+        
+        // Cerrar el escáner
         stopScanner();
       });
 
     } catch (error) {
       setError('Error al cargar el escáner. Verifica que la librería esté instalada.');
       setIsScanning(false);
+    }
+  };
+
+  // Función para buscar por código
+  const buscarPorCodigo = async (codigo) => {
+    try {
+      setLoading(true);
+      setBusqueda(codigo); // Actualizar el campo de búsqueda
+      
+      const response = await fetch(`http://localhost:5000/api/inventario/repuestos?page=1&per_page=${rowsPerPage}&search=${encodeURIComponent(codigo)}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Error al buscar el repuesto');
+      }
+
+      const data = await response.json();
+      
+      if (data.repuestos && data.repuestos.length > 0) {
+        // Filtrar por código exacto
+        const repuestosFiltrados = data.repuestos.filter(repuesto => 
+          repuesto.codigo?.toLowerCase() === codigo.toLowerCase()
+        );
+
+        setRepuestos(repuestosFiltrados.map(repuesto => ({
+          ...repuesto,
+          stock: repuesto.stock_actual || repuesto.stock || 0
+        })));
+        setTotalRepuestos(repuestosFiltrados.length);
+        
+        if (repuestosFiltrados.length > 0) {
+          setSuccess(`Repuesto encontrado: ${repuestosFiltrados[0].nombre}`);
+          setError('');
+        } else {
+          setError(`No se encontró ningún repuesto con el código ${codigo}`);
+        }
+      } else {
+        setRepuestos([]);
+        setTotalRepuestos(0);
+        setError(`No se encontró ningún repuesto con el código ${codigo}`);
+      }
+    } catch (error) {
+      console.error('Error en buscarPorCodigo:', error);
+      setError('Error al buscar el repuesto');
+      setRepuestos([]);
+      setTotalRepuestos(0);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -567,6 +671,161 @@ function Inventario() {
     setPage(0);
   };
 
+  // Función para cargar el historial de movimientos
+  const cargarHistorialMovimientos = async (repuestoId) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/inventario/movimientos/${repuestoId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al cargar el historial de movimientos');
+      }
+
+      const data = await response.json();
+      setHistorialMovimientos(data.movimientos || []);
+    } catch (error) {
+      console.error('Error al cargar historial:', error);
+      setError('Error al cargar el historial de movimientos');
+    }
+  };
+
+  const handleOpenStockDialog = () => {
+    setShowRepuestoSelector(true);
+  };
+
+  const handleSelectRepuestoForStock = (repuesto) => {
+    setSelectedRepuesto(repuesto);
+    setShowRepuestoSelector(false);
+    setOpenStockDialog(true);
+    cargarHistorialMovimientos(repuesto.id);
+  };
+
+  const handleCloseStockDialog = () => {
+    setOpenStockDialog(false);
+    setSelectedRepuesto(null);
+    setHistorialMovimientos([]);
+  };
+
+  // Función para filtrar y ordenar repuestos
+  const getFilteredAndSortedRepuestos = () => {
+    let filtered = [...repuestos];
+    
+    // Aplicar filtro de búsqueda
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(repuesto => 
+        repuesto.nombre?.toLowerCase().includes(term) ||
+        repuesto.codigo?.toLowerCase().includes(term) ||
+        repuesto.categoria?.toLowerCase().includes(term)
+      );
+    }
+
+    // Aplicar filtro de categoría
+    if (selectedCategoria) {
+      filtered = filtered.filter(repuesto => 
+        repuesto.categoria === selectedCategoria
+      );
+    }
+
+    // Aplicar ordenamiento
+    filtered.sort((a, b) => {
+      if (!a[sortConfig.key] || !b[sortConfig.key]) return 0;
+      
+      const aValue = a[sortConfig.key].toString().toLowerCase();
+      const bValue = b[sortConfig.key].toString().toLowerCase();
+      
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return filtered;
+  };
+
+  // Función para manejar el ordenamiento
+  const handleSort = (key) => {
+    setSortConfig(prevConfig => ({
+      key,
+      direction: prevConfig.key === key && prevConfig.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  // Función para obtener los repuestos paginados
+  const getPaginatedRepuestos = () => {
+    const filtered = getFilteredAndSortedRepuestos();
+    const start = virtualPage * virtualRowsPerPage;
+    return filtered.slice(start, start + virtualRowsPerPage);
+  };
+
+  // Función para manejar el cambio de página
+  const handleVirtualPageChange = (event, newPage) => {
+    setVirtualPage(newPage);
+  };
+
+  // Función para iniciar el escáner en el selector
+  const startScannerInSelector = async () => {
+    setIsScanningInSelector(true);
+    
+    try {
+      const Quagga = (await import('quagga')).default;
+      
+      Quagga.init({
+        inputStream: {
+          name: "Live",
+          type: "LiveStream",
+          target: selectorVideoRef.current,
+          constraints: {
+            width: 640,
+            height: 480,
+            facingMode: "environment"
+          }
+        },
+        locator: {
+          patchSize: "medium",
+          halfSample: true
+        },
+        numOfWorkers: 2,
+        decoder: {
+          readers: ["code_128_reader", "ean_reader", "ean_8_reader", "code_39_reader", "upc_reader", "upc_e_reader"]
+        },
+        locate: true
+      }, (err) => {
+        if (err) {
+          console.error(err);
+          setError('Error al inicializar el escáner');
+          setIsScanningInSelector(false);
+          return;
+        }
+        Quagga.start();
+      });
+
+      Quagga.onDetected((result) => {
+        const code = result.codeResult.code;
+        console.log('Código detectado en selector:', code);
+        setSearchTerm(code);
+        stopScannerInSelector();
+      });
+
+    } catch (error) {
+      setError('Error al cargar el escáner');
+      setIsScanningInSelector(false);
+    }
+  };
+
+  // Función para detener el escáner en el selector
+  const stopScannerInSelector = async () => {
+    try {
+      const Quagga = (await import('quagga')).default;
+      Quagga.stop();
+    } catch (error) {
+      console.error('Error stopping scanner:', error);
+    }
+    setIsScanningInSelector(false);
+  };
+
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -580,6 +839,13 @@ function Inventario() {
             Gestionar Categorías
           </Button>
           <Button
+            variant="outlined"
+            startIcon={<AutoGenerateIcon />}
+            onClick={handleOpenStockDialog}
+          >
+            Stock
+          </Button>
+          <Button
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => handleOpenDialog()}
@@ -590,20 +856,49 @@ function Inventario() {
       </Box>
 
       <Paper sx={{ p: 2, mb: 3 }}>
-        <TextField
-          fullWidth
-          variant="outlined"
-          placeholder="Buscar repuestos..."
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-        />
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <TextField
+            fullWidth
+            variant="outlined"
+            placeholder="Buscar por nombre, código o categoría..."
+            value={busqueda}
+            onChange={(e) => {
+              setBusqueda(e.target.value);
+              if (e.target.value === '') {
+                setError('');
+              }
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+              endAdornment: busqueda && (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    onClick={() => {
+                      setBusqueda('');
+                      setError('');
+                      cargarRepuestos();
+                    }}
+                  >
+                    <CloseIcon />
+                  </IconButton>
+                </InputAdornment>
+              )
+            }}
+          />
+          <Tooltip title="Escanear código de barras">
+            <IconButton 
+              onClick={startScanner}
+              sx={{ bgcolor: 'primary.main', color: 'white', '&:hover': { bgcolor: 'primary.dark' } }}
+            >
+              <ScannerIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Paper>
 
       <TableContainer component={Paper}>
@@ -662,15 +957,6 @@ function Inventario() {
                         <IconButton onClick={() => handleOpenDialog(repuesto)}>
                           <VisibilityIcon />
                         </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Registrar Movimiento">
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          onClick={() => handleOpenMovimientoDialog(repuesto)}
-                        >
-                          Movimiento
-                        </Button>
                       </Tooltip>
                     </Box>
                   </TableCell>
@@ -954,12 +1240,30 @@ function Inventario() {
                     height: 300,
                     border: '2px solid #1976d2',
                     borderRadius: 1,
-                    overflow: 'hidden'
+                    overflow: 'hidden',
+                    position: 'relative'
                   }}
                 >
                   <video 
                     ref={videoRef}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: '50%',
+                      left: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      width: '80%',
+                      height: '2px',
+                      bgcolor: 'primary.main',
+                      animation: 'scan 2s linear infinite',
+                      '@keyframes scan': {
+                        '0%': { top: '20%' },
+                        '50%': { top: '80%' },
+                        '100%': { top: '20%' }
+                      }
+                    }}
                   />
                 </Box>
                 <canvas 
@@ -1286,6 +1590,406 @@ function Inventario() {
             </Button>
           )}
         </DialogActions>
+      </Dialog>
+
+      {/* Diálogo de Selección de Repuesto para Stock */}
+      <Dialog
+        open={showRepuestoSelector}
+        onClose={() => {
+          setShowRepuestoSelector(false);
+          stopScannerInSelector();
+        }}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">
+              Seleccionar Repuesto para Gestionar Stock
+            </Typography>
+            <IconButton onClick={() => {
+              setShowRepuestoSelector(false);
+              stopScannerInSelector();
+            }}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Box sx={{ mb: 3 }}>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  variant="outlined"
+                  placeholder="Buscar por nombre, código o categoría..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon />
+                      </InputAdornment>
+                    ),
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        {searchTerm && (
+                          <IconButton
+                            size="small"
+                            onClick={() => setSearchTerm('')}
+                          >
+                            <CloseIcon />
+                          </IconButton>
+                        )}
+                        <Tooltip title="Escanear código de barras">
+                          <IconButton
+                            size="small"
+                            onClick={startScannerInSelector}
+                            sx={{ ml: 1 }}
+                          >
+                            <ScannerIcon />
+                          </IconButton>
+                        </Tooltip>
+                      </InputAdornment>
+                    )
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Filtrar por Categoría</InputLabel>
+                  <Select
+                    value={selectedCategoria}
+                    onChange={(e) => setSelectedCategoria(e.target.value)}
+                    label="Filtrar por Categoría"
+                  >
+                    <MenuItem value="">Todas las categorías</MenuItem>
+                    {categorias.map((categoria) => (
+                      <MenuItem key={categoria} value={categoria}>
+                        {categoria}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
+          </Box>
+
+          {/* Contenedor del escáner */}
+          {isScanningInSelector && (
+            <Box 
+              sx={{ 
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                bgcolor: 'rgba(0, 0, 0, 0.8)',
+                zIndex: 1300,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <Box sx={{ 
+                width: '100%', 
+                maxWidth: 640,
+                position: 'relative',
+                bgcolor: 'black',
+                borderRadius: 2,
+                overflow: 'hidden'
+              }}>
+                <video 
+                  ref={selectorVideoRef}
+                  style={{ width: '100%', height: 'auto' }}
+                />
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '80%',
+                    height: '2px',
+                    bgcolor: 'primary.main',
+                    animation: 'scan 2s linear infinite',
+                    '@keyframes scan': {
+                      '0%': { top: '20%' },
+                      '50%': { top: '80%' },
+                      '100%': { top: '20%' }
+                    }
+                  }}
+                />
+                <canvas 
+                  ref={selectorCanvasRef}
+                  style={{ display: 'none' }}
+                />
+                <IconButton
+                  onClick={stopScannerInSelector}
+                  sx={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    bgcolor: 'rgba(255, 255, 255, 0.8)',
+                    '&:hover': {
+                      bgcolor: 'rgba(255, 255, 255, 0.9)'
+                    }
+                  }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </Box>
+              <Typography 
+                variant="h6" 
+                sx={{ 
+                  color: 'white', 
+                  mt: 2,
+                  textAlign: 'center'
+                }}
+              >
+                Enfoca el código de barras en el área de la cámara
+              </Typography>
+            </Box>
+          )}
+
+          <TableContainer sx={{ maxHeight: 440 }}>
+            <Table stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell 
+                    onClick={() => handleSort('codigo')}
+                    sx={{ cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    Código
+                    {sortConfig.key === 'codigo' && (
+                      <span>{sortConfig.direction === 'asc' ? ' ↑' : ' ↓'}</span>
+                    )}
+                  </TableCell>
+                  <TableCell 
+                    onClick={() => handleSort('nombre')}
+                    sx={{ cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    Nombre
+                    {sortConfig.key === 'nombre' && (
+                      <span>{sortConfig.direction === 'asc' ? ' ↑' : ' ↓'}</span>
+                    )}
+                  </TableCell>
+                  <TableCell 
+                    onClick={() => handleSort('categoria')}
+                    sx={{ cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    Categoría
+                    {sortConfig.key === 'categoria' && (
+                      <span>{sortConfig.direction === 'asc' ? ' ↑' : ' ↓'}</span>
+                    )}
+                  </TableCell>
+                  <TableCell 
+                    onClick={() => handleSort('stock')}
+                    sx={{ cursor: 'pointer', userSelect: 'none' }}
+                  >
+                    Stock Actual
+                    {sortConfig.key === 'stock' && (
+                      <span>{sortConfig.direction === 'asc' ? ' ↑' : ' ↓'}</span>
+                    )}
+                  </TableCell>
+                  <TableCell>Acción</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {getPaginatedRepuestos().map((repuesto) => (
+                  <TableRow 
+                    key={repuesto.id}
+                    hover
+                    sx={{ 
+                      '&:hover': { 
+                        backgroundColor: 'action.hover',
+                        cursor: 'pointer'
+                      }
+                    }}
+                    onClick={() => handleSelectRepuestoForStock(repuesto)}
+                  >
+                    <TableCell>{repuesto.codigo}</TableCell>
+                    <TableCell>{repuesto.nombre}</TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={repuesto.categoria} 
+                        size="small"
+                        sx={{ 
+                          bgcolor: '#e3f2fd', 
+                          color: '#1976d2',
+                          '&:hover': {
+                            bgcolor: '#bbdefb'
+                          }
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {repuesto.stock}
+                        {repuesto.stock <= repuesto.stock_minimo && (
+                          <Tooltip title={`Stock bajo (mínimo: ${repuesto.stock_minimo})`}>
+                            <WarningIcon color="warning" fontSize="small" />
+                          </Tooltip>
+                        )}
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectRepuestoForStock(repuesto);
+                        }}
+                      >
+                        Seleccionar
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          <TablePagination
+            component="div"
+            count={getFilteredAndSortedRepuestos().length}
+            page={virtualPage}
+            onPageChange={handleVirtualPageChange}
+            rowsPerPage={virtualRowsPerPage}
+            rowsPerPageOptions={[virtualRowsPerPage]}
+            labelDisplayedRows={({ from, to, count }) => `${from}-${to} de ${count}`}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de Gestión de Stock */}
+      <Dialog 
+        open={openStockDialog} 
+        onClose={handleCloseStockDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">
+              Gestión de Stock - {selectedRepuesto?.nombre}
+            </Typography>
+            <IconButton onClick={handleCloseStockDialog}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Grid container spacing={3}>
+            {/* Sección de Movimiento */}
+            <Grid item xs={12} md={6}>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Registrar Movimiento
+                </Typography>
+                <Box component="form" onSubmit={handleMovimientoSubmit} sx={{ mt: 2 }}>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                      <FormControl fullWidth>
+                        <InputLabel>Tipo de Movimiento</InputLabel>
+                        <Select
+                          name="tipo"
+                          value={movimientoActual.tipo}
+                          onChange={handleMovimientoInputChange}
+                          label="Tipo de Movimiento"
+                        >
+                          <MenuItem value="entrada">Entrada</MenuItem>
+                          <MenuItem value="salida">Salida</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Cantidad"
+                        name="cantidad"
+                        type="number"
+                        value={movimientoActual.cantidad}
+                        onChange={handleMovimientoInputChange}
+                        required
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Notas"
+                        name="notas"
+                        value={movimientoActual.notas}
+                        onChange={handleMovimientoInputChange}
+                        multiline
+                        rows={2}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Button 
+                        type="submit" 
+                        variant="contained" 
+                        fullWidth
+                        disabled={loading}
+                      >
+                        {loading ? <CircularProgress size={24} /> : 'Registrar Movimiento'}
+                      </Button>
+                    </Grid>
+                  </Grid>
+                </Box>
+              </Paper>
+            </Grid>
+
+            {/* Sección de Historial */}
+            <Grid item xs={12} md={6}>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Historial de Movimientos
+                </Typography>
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Fecha</TableCell>
+                        <TableCell>Tipo</TableCell>
+                        <TableCell>Cantidad</TableCell>
+                        <TableCell>Notas</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {historialMovimientos.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} align="center">
+                            No hay movimientos registrados
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        historialMovimientos.map((movimiento) => (
+                          <TableRow key={movimiento.id}>
+                            <TableCell>
+                              {new Date(movimiento.fecha).toLocaleString()}
+                            </TableCell>
+                            <TableCell>
+                              <Chip 
+                                label={movimiento.tipo === 'entrada' ? 'Entrada' : 'Salida'}
+                                color={movimiento.tipo === 'entrada' ? 'success' : 'error'}
+                                size="small"
+                              />
+                            </TableCell>
+                            <TableCell>{movimiento.cantidad}</TableCell>
+                            <TableCell>{movimiento.notas}</TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+            </Grid>
+          </Grid>
+        </DialogContent>
       </Dialog>
 
       <Snackbar
