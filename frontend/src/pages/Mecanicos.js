@@ -107,6 +107,7 @@ function Mecanicos() {
     estado: '',
     search: ''
   });
+  const [filtroMes, setFiltroMes] = useState('');
 
   const especialidades = [
     'Mecánica General',
@@ -967,6 +968,19 @@ function Mecanicos() {
     cargarServiciosMecanico(mecanicoActual.id, 1, nuevosFiltros);
   };
 
+  const obtenerMeses = () => {
+    const meses = [];
+    const fechaActual = new Date();
+    for (let i = 0; i < 12; i++) {
+        const fecha = new Date(fechaActual.getFullYear(), fechaActual.getMonth() - i, 1);
+        meses.push({
+            value: fecha.toISOString().slice(0, 7), // Formato YYYY-MM
+            label: fecha.toLocaleDateString('es-ES', { year: 'numeric', month: 'long' })
+        });
+    }
+    return meses;
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -1245,7 +1259,7 @@ function Mecanicos() {
         <DialogContent>
           <Box sx={{ mb: 2 }}>
             <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={4}>
                 <TextField
                   fullWidth
                   label="Buscar servicios"
@@ -1260,7 +1274,7 @@ function Mecanicos() {
                   }}
                 />
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={4}>
                 <FormControl fullWidth>
                   <InputLabel>Estado</InputLabel>
                   <Select
@@ -1275,6 +1289,23 @@ function Mecanicos() {
                     <MenuItem value="pausado">Pausado</MenuItem>
                     <MenuItem value="completado">Completado</MenuItem>
                     <MenuItem value="cancelado">Cancelado</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <FormControl fullWidth>
+                  <InputLabel>Mes</InputLabel>
+                  <Select
+                    value={filtroMes}
+                    onChange={(e) => setFiltroMes(e.target.value)}
+                    label="Mes"
+                  >
+                    <MenuItem value="">Todos los meses</MenuItem>
+                    {obtenerMeses().map((mes) => (
+                        <MenuItem key={mes.value} value={mes.value}>
+                            {mes.label}
+                        </MenuItem>
+                    ))}
                   </Select>
                 </FormControl>
               </Grid>
@@ -1564,109 +1595,188 @@ function Mecanicos() {
               {/* Servicios Activos */}
               <Grid item xs={12}>
                 <Paper variant="outlined" sx={{ p: 2 }}>
-                  <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
-                    Servicios Activos
-                  </Typography>
-                  <TableContainer>
-                    <Table size="small">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Fecha</TableCell>
-                          <TableCell>Vehículo</TableCell>
-                          <TableCell>Tipo</TableCell>
-                          <TableCell>Estado</TableCell>
-                          <TableCell>Honorarios</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {mecanicoDetalle?.servicios?.filter(servicio => 
-                            ['pendiente', 'diagnostico', 'aprobado', 'en_progreso', 'pausado'].includes(servicio.estado)
-                        ).map((servicio) => (
-                          <TableRow key={servicio.id}>
-                            <TableCell>
-                              {new Date(servicio.fecha_inicio).toLocaleDateString()}
-                            </TableCell>
-                            <TableCell>
-                              {servicio.vehiculo ? 
-                                `${servicio.vehiculo.marca} ${servicio.vehiculo.modelo} (${servicio.vehiculo.placa})` : 
-                                'N/A'}
-                            </TableCell>
-                            <TableCell>{servicio.tipo_servicio}</TableCell>
-                            <TableCell>
-                              <Chip
-                                label={formatEstadoLabel(servicio.estado)}
-                                color={
-                                  servicio.estado === 'completado' ? 'success' :
-                                  servicio.estado === 'en_progreso' ? 'warning' :
-                                  servicio.estado === 'diagnostico' ? 'info' :
-                                  servicio.estado === 'pausado' ? 'secondary' :
-                                  servicio.estado === 'cancelado' ? 'error' : 
-                                  'primary'
-                                }
-                                size="small"
-                                sx={{ 
-                                  fontWeight: 'medium',
-                                  '&.MuiChip-colorSuccess': {
-                                    bgcolor: '#4CAF50',
-                                    color: 'white'
-                                  },
-                                  '&.MuiChip-colorWarning': {
-                                    bgcolor: '#FF9800',
-                                    color: 'white'
-                                  },
-                                  '&.MuiChip-colorInfo': {
-                                    bgcolor: '#2196F3',
-                                    color: 'white'
-                                  },
-                                  '&.MuiChip-colorSecondary': {
-                                    bgcolor: '#9C27B0',
-                                    color: 'white'
-                                  },
-                                  '&.MuiChip-colorError': {
-                                    bgcolor: '#F44336',
-                                    color: 'white'
-                                  },
-                                  '&.MuiChip-colorPrimary': {
-                                    bgcolor: '#3F51B5',
-                                    color: 'white'
-                                  }
-                                }}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+                        Servicios
+                    </Typography>
+                    <Box sx={{ mb: 2 }}>
+                        <Grid container spacing={2}>
+                            <Grid item xs={12} md={4}>
                                 <TextField
-                                  type="text"
-                                  size="small"
-                                  value={honorariosEditando[servicio.id] !== undefined ? 
-                                    honorariosEditando[servicio.id] : 
-                                    formatearNumero(servicio.honorarios)}
-                                  onChange={(e) => handleHonorariosChange(servicio.id, e.target.value)}
-                                  InputProps={{
-                                    startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                                    style: { textAlign: 'right' }
-                                  }}
-                                  sx={{ width: '150px' }}
+                                    fullWidth
+                                    label="Buscar servicios"
+                                    value={filtros.search}
+                                    onChange={(e) => handleFiltrosChange({ ...filtros, search: e.target.value })}
+                                    InputProps={{
+                                        startAdornment: (
+                                            <InputAdornment position="start">
+                                                <SearchIcon />
+                                            </InputAdornment>
+                                        ),
+                                    }}
                                 />
-                                <IconButton 
-                                  size="small" 
-                                  color="primary"
-                                  onClick={() => handleGuardarHonorarios(servicio.id)}
-                                  sx={{ 
-                                    bgcolor: 'primary.light',
-                                    '&:hover': { bgcolor: 'primary.main' },
-                                    color: 'white'
-                                  }}
-                                >
-                                  <SaveIcon fontSize="small" />
-                                </IconButton>
-                              </Box>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Estado</InputLabel>
+                                    <Select
+                                        value={filtros.estado}
+                                        onChange={(e) => handleFiltrosChange({ ...filtros, estado: e.target.value })}
+                                        label="Estado"
+                                    >
+                                        <MenuItem value="">Todos</MenuItem>
+                                        <MenuItem value="pendiente">Pendiente</MenuItem>
+                                        <MenuItem value="diagnostico">Diagnóstico</MenuItem>
+                                        <MenuItem value="en_progreso">En Progreso</MenuItem>
+                                        <MenuItem value="pausado">Pausado</MenuItem>
+                                        <MenuItem value="completado">Completado</MenuItem>
+                                        <MenuItem value="cancelado">Cancelado</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Mes</InputLabel>
+                                    <Select
+                                        value={filtroMes}
+                                        onChange={(e) => setFiltroMes(e.target.value)}
+                                        label="Mes"
+                                    >
+                                        <MenuItem value="">Todos los meses</MenuItem>
+                                        {obtenerMeses().map((mes) => (
+                                            <MenuItem key={mes.value} value={mes.value}>
+                                                {mes.label}
+                                            </MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                        </Grid>
+                    </Box>
+                    <TableContainer>
+                        <Table size="small">
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>Fecha</TableCell>
+                                    <TableCell>Vehículo</TableCell>
+                                    <TableCell>Tipo</TableCell>
+                                    <TableCell>Estado</TableCell>
+                                    <TableCell>Honorarios</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {mecanicoDetalle?.servicios
+                                    ?.filter(servicio => {
+                                        const matchesSearch = filtros.search 
+                                            ? servicio.tipo_servicio.toLowerCase().includes(filtros.search.toLowerCase()) ||
+                                              servicio.descripcion.toLowerCase().includes(filtros.search.toLowerCase())
+                                            : true;
+                                        
+                                        const matchesEstado = filtros.estado
+                                            ? servicio.estado === filtros.estado
+                                            : true;
+
+                                        const matchesMes = filtroMes
+                                            ? new Date(servicio.fecha_inicio).toISOString().slice(0, 7) === filtroMes
+                                            : true;
+
+                                        return matchesSearch && matchesEstado && matchesMes;
+                                    })
+                                    .map((servicio) => (
+                                        <TableRow key={servicio.id}>
+                                            <TableCell>
+                                                {new Date(servicio.fecha_inicio).toLocaleDateString()}
+                                            </TableCell>
+                                            <TableCell>
+                                                {servicio.vehiculo ? 
+                                                    `${servicio.vehiculo.marca} ${servicio.vehiculo.modelo} (${servicio.vehiculo.placa})` : 
+                                                    'N/A'}
+                                            </TableCell>
+                                            <TableCell>{servicio.tipo_servicio}</TableCell>
+                                            <TableCell>
+                                                <Chip
+                                                    label={formatEstadoLabel(servicio.estado)}
+                                                    color={
+                                                        servicio.estado === 'completado' ? 'success' :
+                                                        servicio.estado === 'en_progreso' ? 'warning' :
+                                                        servicio.estado === 'diagnostico' ? 'info' :
+                                                        servicio.estado === 'pausado' ? 'secondary' :
+                                                        servicio.estado === 'cancelado' ? 'error' : 
+                                                        'primary'
+                                                    }
+                                                    size="small"
+                                                    sx={{ 
+                                                        fontWeight: 'medium',
+                                                        '&.MuiChip-colorSuccess': {
+                                                            bgcolor: '#4CAF50',
+                                                            color: 'white'
+                                                        },
+                                                        '&.MuiChip-colorWarning': {
+                                                            bgcolor: '#FF9800',
+                                                            color: 'white'
+                                                        },
+                                                        '&.MuiChip-colorInfo': {
+                                                            bgcolor: '#2196F3',
+                                                            color: 'white'
+                                                        },
+                                                        '&.MuiChip-colorSecondary': {
+                                                            bgcolor: '#9C27B0',
+                                                            color: 'white'
+                                                        },
+                                                        '&.MuiChip-colorError': {
+                                                            bgcolor: '#F44336',
+                                                            color: 'white'
+                                                        },
+                                                        '&.MuiChip-colorPrimary': {
+                                                            bgcolor: '#3F51B5',
+                                                            color: 'white'
+                                                        }
+                                                    }}
+                                                />
+                                            </TableCell>
+                                            <TableCell>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <TextField
+                                                        type="text"
+                                                        size="small"
+                                                        value={honorariosEditando[servicio.id] !== undefined ? 
+                                                            honorariosEditando[servicio.id] : 
+                                                            formatearNumero(servicio.honorarios)}
+                                                        onChange={(e) => handleHonorariosChange(servicio.id, e.target.value)}
+                                                        InputProps={{
+                                                            startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                                                            style: { textAlign: 'right' }
+                                                        }}
+                                                        sx={{ width: '150px' }}
+                                                    />
+                                                    <IconButton 
+                                                        size="small" 
+                                                        color="primary"
+                                                        onClick={() => handleGuardarHonorarios(servicio.id)}
+                                                        sx={{ 
+                                                            bgcolor: 'primary.light',
+                                                            '&:hover': { bgcolor: 'primary.main' },
+                                                            color: 'white'
+                                                        }}
+                                                    >
+                                                        <SaveIcon fontSize="small" />
+                                                    </IconButton>
+                                                </Box>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                        <Pagination
+                            count={Math.ceil((mecanicoDetalle?.servicios?.length || 0) / 10)}
+                            page={pagination.page}
+                            onChange={handlePageChange}
+                            color="primary"
+                            showFirstButton
+                            showLastButton
+                        />
+                    </Box>
                 </Paper>
               </Grid>
           </Grid>
