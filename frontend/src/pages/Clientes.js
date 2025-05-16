@@ -81,8 +81,19 @@ function Clientes() {
 
   const handleOpenDialog = (cliente = null) => {
     if (cliente) {
-      setClienteDetalle(cliente);
-      setDialogoClienteAbierto(true);
+      if (dialogoClienteAbierto) {
+        setDialogoClienteAbierto(false);
+        setTimeout(() => {
+          setClienteActual({
+            ...cliente,
+            fecha_registro: cliente.fecha_registro ? new Date(cliente.fecha_registro).toISOString().split('T')[0] : ''
+          });
+          setOpenDialog(true);
+        }, 100);
+      } else {
+        setClienteDetalle(cliente);
+        setDialogoClienteAbierto(true);
+      }
     } else {
       setClienteActual({
         nombre: '',
@@ -90,6 +101,9 @@ function Clientes() {
         email: '',
         telefono: '',
         direccion: '',
+        fecha_registro: new Date().toISOString().split('T')[0],
+        tipo_cliente: 'regular',
+        notas: ''
       });
       setOpenDialog(true);
     }
@@ -131,16 +145,41 @@ function Clientes() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('¿Está seguro de eliminar este cliente?')) {
-      return;
-    }
-
     try {
-      await deleteCliente(id);
+      const cliente = clientes.find(c => c.id === id);
+      if (cliente?.vehiculos?.length > 0) {
+        setError('No se puede eliminar el cliente porque tiene vehículos asociados.');
+        return;
+      }
+
+      if (!window.confirm('¿Está seguro de eliminar este cliente?')) {
+        return;
+      }
+
+      setLoading(true);
+      const response = await fetch(`http://localhost:5000/api/clientes/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error al eliminar el cliente');
+      }
+
       setSuccess('Cliente eliminado exitosamente');
-      cargarClientes();
+      
+      if (dialogoClienteAbierto) {
+        setDialogoClienteAbierto(false);
+      }
+      
+      await cargarClientes();
     } catch (error) {
       setError(error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -158,14 +197,25 @@ function Clientes() {
     navigate(`/vehiculos?vehiculo=${vehiculoId}`);
   };
 
-  const handleAgregarVehiculo = () => {
+  const handleAgregarVehiculo = (cliente) => {
+    if (!cliente || !cliente.id) {
+      setError('Error: No se pudo obtener la información del cliente');
+      return;
+    }
+
+    const clienteData = {
+      id: cliente.id,
+      nombre: cliente.nombre,
+      apellido: cliente.apellido
+    };
+
+    console.log('Navegando a vehículos con datos del cliente:', clienteData);
+
     navigate('/vehiculos', { 
-      state: { 
-        clienteId: clienteSeleccionado?.id,
-        clienteNombre: `${clienteSeleccionado?.nombre} ${clienteSeleccionado?.apellido}`
-      } 
+      state: clienteData
     });
-    handleCloseVehiculosDialog();
+    
+    setDialogoClienteAbierto(false);
   };
 
   const clientesFiltrados = clientes.filter((cliente) =>
@@ -249,19 +299,9 @@ function Clientes() {
                 </TableCell>
                 <TableCell>
                   <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Tooltip title="Ver vehículos">
-                      <IconButton onClick={() => handleVerVehiculos(cliente)}>
-                        <CarIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Editar">
+                    <Tooltip title="Ver detalles">
                       <IconButton onClick={() => handleOpenDialog(cliente)}>
-                        <EditIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Eliminar">
-                      <IconButton onClick={() => handleDelete(cliente.id)}>
-                        <DeleteIcon />
+                        <VisibilityIcon />
                       </IconButton>
                     </Tooltip>
                   </Box>
@@ -346,7 +386,7 @@ function Clientes() {
         </DialogContent>
         <DialogActions>
           <Button 
-            onClick={handleAgregarVehiculo}
+            onClick={() => handleAgregarVehiculo(clienteSeleccionado)}
             variant="contained"
             startIcon={<AddIcon />}
           >
@@ -381,7 +421,7 @@ function Clientes() {
         <DialogContent dividers sx={{ p: 3 }}>
           {clienteDetalle && (
             <Grid container spacing={3}>
-              {/* Información del Cliente */}
+              {/* Información Personal */}
               <Grid item xs={12} md={6}>
                 <Paper variant="outlined" sx={{ p: 2 }}>
                   <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
@@ -393,9 +433,14 @@ function Clientes() {
                         <Typography variant="body2" color="text.secondary">Nombre:</Typography>
                       </Grid>
                       <Grid item xs={8}>
-                        <Typography variant="body2">
-                          {clienteDetalle.nombre} {clienteDetalle.apellido}
-                        </Typography>
+                        <Typography variant="body2">{clienteDetalle.nombre}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Apellido:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{clienteDetalle.apellido}</Typography>
                       </Grid>
                       
                       <Grid item xs={4}>
@@ -416,149 +461,109 @@ function Clientes() {
                         <Typography variant="body2" color="text.secondary">Dirección:</Typography>
                       </Grid>
                       <Grid item xs={8}>
-                        <Typography variant="body2">{clienteDetalle.direccion || 'No disponible'}</Typography>
+                        <Typography variant="body2">{clienteDetalle.direccion}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Tipo:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Chip 
+                          label={clienteDetalle.tipo_cliente === 'vip' ? 'VIP' : 'Regular'} 
+                          size="small"
+                          sx={{ 
+                            bgcolor: clienteDetalle.tipo_cliente === 'vip' ? '#ffd700' : '#e3f2fd',
+                            color: clienteDetalle.tipo_cliente === 'vip' ? '#000' : '#1976d2'
+                          }}
+                        />
                       </Grid>
                     </Grid>
                   </Box>
                 </Paper>
               </Grid>
               
-              {/* Resumen de Vehículos */}
+              {/* Información Adicional */}
               <Grid item xs={12} md={6}>
                 <Paper variant="outlined" sx={{ p: 2 }}>
                   <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
-                    Resumen de Vehículos
+                    Información Adicional
                   </Typography>
                   <Box sx={{ mt: 2 }}>
-                    <Typography variant="subtitle1" gutterBottom>
-                      Total de vehículos: {clienteDetalle.vehiculos?.length || 0}
-                    </Typography>
-                    {clienteDetalle.vehiculos && clienteDetalle.vehiculos.length > 0 ? (
-                      <List>
-                        {clienteDetalle.vehiculos.map((vehiculo) => (
-                          <ListItem 
-                            key={vehiculo.id}
-                            sx={{
-                              border: '1px solid',
-                              borderColor: 'divider',
-                              borderRadius: 1,
-                              mb: 1,
-                              '&:hover': {
-                                backgroundColor: 'action.hover'
-                              }
-                            }}
-                          >
-                            <ListItemText
-                              primary={
-                                <Typography variant="subtitle1">
-                                  {vehiculo.marca} {vehiculo.modelo} ({vehiculo.año})
-                                </Typography>
-                              }
-                              secondary={
-                                <Typography variant="body2" color="text.secondary">
-                                  Placa: {vehiculo.placa}
-                                </Typography>
-                              }
-                            />
-                            <ListItemSecondaryAction>
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                onClick={() => handleIrAVehiculo(vehiculo.id)}
-                                startIcon={<VisibilityIcon />}
-                              >
-                                Ver detalles
-                              </Button>
-                            </ListItemSecondaryAction>
-                          </ListItem>
-                        ))}
-                      </List>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        No hay vehículos registrados
-                      </Typography>
-                    )}
+                    <Grid container spacing={2}>
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Fecha Registro:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">
+                          {new Date(clienteDetalle.fecha_registro).toLocaleDateString()}
+                        </Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Notas:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">
+                          {clienteDetalle.notas || 'Sin notas'}
+                        </Typography>
+                      </Grid>
+                    </Grid>
                   </Box>
                 </Paper>
               </Grid>
               
-              {/* Historial de Servicios */}
+              {/* Vehículos del Cliente */}
               <Grid item xs={12}>
                 <Paper variant="outlined" sx={{ p: 2 }}>
-                  <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
-                    Historial de Servicios
-                  </Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="h6" sx={{ color: 'primary.main' }}>
+                      Vehículos del Cliente
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      startIcon={<AddIcon />}
+                      onClick={() => {
+                        console.log('Cliente detalle al agregar vehículo:', clienteDetalle);
+                        handleAgregarVehiculo(clienteDetalle);
+                      }}
+                      size="small"
+                    >
+                      Nuevo Vehículo
+                    </Button>
+                  </Box>
                   <TableContainer>
                     <Table size="small">
                       <TableHead>
                         <TableRow>
-                          <TableCell>Fecha</TableCell>
-                          <TableCell>Vehículo</TableCell>
-                          <TableCell>Tipo</TableCell>
-                          <TableCell>Estado</TableCell>
-                          <TableCell>Mecánico</TableCell>
+                          <TableCell>Marca</TableCell>
+                          <TableCell>Modelo</TableCell>
+                          <TableCell>Año</TableCell>
+                          <TableCell>Placa</TableCell>
+                          <TableCell>Color</TableCell>
+                          <TableCell>Kilometraje</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {clienteDetalle.vehiculos?.flatMap(vehiculo => 
-                          vehiculo.servicios?.map(servicio => (
-                            <TableRow key={servicio.id}>
-                              <TableCell>
-                                {new Date(servicio.fecha_inicio).toLocaleDateString()}
-                              </TableCell>
-                              <TableCell>
-                                {vehiculo.marca} {vehiculo.modelo} ({vehiculo.placa})
-                              </TableCell>
-                              <TableCell>{servicio.tipo_servicio}</TableCell>
-                              <TableCell>
-                                <Chip
-                                  label={formatEstadoLabel(servicio.estado)}
-                                  color={
-                                    servicio.estado === 'completado' ? 'success' :
-                                    servicio.estado === 'en_progreso' ? 'warning' :
-                                    servicio.estado === 'diagnostico' ? 'info' :
-                                    servicio.estado === 'pausado' ? 'secondary' :
-                                    servicio.estado === 'cancelado' ? 'error' : 
-                                    'primary'
-                                  }
-                                  size="small"
-                                  sx={{ 
-                                    fontWeight: 'medium',
-                                    '&.MuiChip-colorSuccess': {
-                                      bgcolor: '#4CAF50',
-                                      color: 'white'
-                                    },
-                                    '&.MuiChip-colorWarning': {
-                                      bgcolor: '#FF9800',
-                                      color: 'white'
-                                    },
-                                    '&.MuiChip-colorInfo': {
-                                      bgcolor: '#2196F3',
-                                      color: 'white'
-                                    },
-                                    '&.MuiChip-colorSecondary': {
-                                      bgcolor: '#9C27B0',
-                                      color: 'white'
-                                    },
-                                    '&.MuiChip-colorError': {
-                                      bgcolor: '#F44336',
-                                      color: 'white'
-                                    },
-                                    '&.MuiChip-colorPrimary': {
-                                      bgcolor: '#3F51B5',
-                                      color: 'white'
-                                    }
-                                  }}
-                                />
-                              </TableCell>
-                              <TableCell>
-                                {servicio.mecanico ? 
-                                  `${servicio.mecanico.nombre} ${servicio.mecanico.apellido}` : 
-                                  'Sin asignar'}
-                              </TableCell>
+                        {clienteDetalle.vehiculos?.length > 0 ? (
+                          clienteDetalle.vehiculos.map((vehiculo) => (
+                            <TableRow key={vehiculo.id}>
+                              <TableCell>{vehiculo.marca}</TableCell>
+                              <TableCell>{vehiculo.modelo}</TableCell>
+                              <TableCell>{vehiculo.anio}</TableCell>
+                              <TableCell>{vehiculo.placa}</TableCell>
+                              <TableCell>{vehiculo.color}</TableCell>
+                              <TableCell>{vehiculo.kilometraje}</TableCell>
                             </TableRow>
                           ))
-                        ) || []}
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={6} align="center">
+                              <Typography variant="body2" color="text.secondary">
+                                No hay vehículos registrados
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        )}
                       </TableBody>
                     </Table>
                   </TableContainer>
@@ -579,24 +584,18 @@ function Clientes() {
             <Button 
               variant="contained" 
               color="primary"
-              onClick={() => {
-                setDialogoClienteAbierto(false);
-                handleOpenDialog(clienteDetalle);
-              }}
+              onClick={() => handleOpenDialog(clienteDetalle)}
               startIcon={<EditIcon />}
+              disabled={loading}
             >
               Editar
             </Button>
             <Button 
               variant="contained" 
               color="error"
-              onClick={() => {
-                if (window.confirm('¿Está seguro de eliminar este cliente?')) {
-                  handleDelete(clienteDetalle.id);
-                  setDialogoClienteAbierto(false);
-                }
-              }}
+              onClick={() => handleDelete(clienteDetalle.id)}
               startIcon={<DeleteIcon />}
+              disabled={loading}
             >
               Eliminar
             </Button>

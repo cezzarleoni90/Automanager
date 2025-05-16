@@ -204,6 +204,7 @@ function Servicios() {
           setEstados({
             'pendiente': { nombre: 'Pendiente', descripcion: 'Servicio creado y pendiente de iniciar' },
             'diagnostico': { nombre: 'En Diagnóstico', descripcion: 'Evaluando el vehículo' },
+            'aprobado': { nombre: 'Aprobado', descripcion: 'Servicio aprobado para iniciar' },
             'en_progreso': { nombre: 'En Progreso', descripcion: 'Trabajo en proceso' },
             'pausado': { nombre: 'Pausado', descripcion: 'Trabajo temporalmente suspendido' },
             'completado': { nombre: 'Completado', descripcion: 'Servicio finalizado' },
@@ -220,6 +221,7 @@ function Servicios() {
         setEstados({
           'pendiente': { nombre: 'Pendiente', descripcion: 'Servicio creado y pendiente de iniciar' },
           'diagnostico': { nombre: 'En Diagnóstico', descripcion: 'Evaluando el vehículo' },
+          'aprobado': { nombre: 'Aprobado', descripcion: 'Servicio aprobado para iniciar' },
           'en_progreso': { nombre: 'En Progreso', descripcion: 'Trabajo en proceso' },
           'pausado': { nombre: 'Pausado', descripcion: 'Trabajo temporalmente suspendido' },
           'completado': { nombre: 'Completado', descripcion: 'Servicio finalizado' },
@@ -315,7 +317,7 @@ function Servicios() {
 
   const handleOpenDialog = async (servicio = null) => {
     try {
-      if (servicio) {
+    if (servicio) {
         console.log('🔄 Cargando detalles completos del servicio:', servicio.id);
         
         // Si ya tenemos el servicio pero solo tenemos el ID, cargarlo completo
@@ -357,12 +359,12 @@ function Servicios() {
           cargarRepuestosServicio(servicioDetallado.id);
           cargarHistorial(servicioDetallado.id);
         }, 500);
-      } else {
-        setServicioActual({
+    } else {
+      setServicioActual({
           ...servicioVacio,
-          vehiculo_id: vehiculoSeleccionado?.id || '',
-        });
-        setOpenDialog(true);
+        vehiculo_id: vehiculoSeleccionado?.id || '',
+      });
+    setOpenDialog(true);
       }
     } catch (error) {
       console.error('❌ Error al cargar detalles del servicio:', error);
@@ -828,8 +830,8 @@ function Servicios() {
     const estadosLabels = {
       'pendiente': 'Pendiente',
       'diagnostico': 'En Diagnóstico',
-      'en_progreso': 'En Progreso',
       'aprobado': 'Aprobado',
+      'en_progreso': 'En Progreso',
       'pausado': 'Pausado',
       'completado': 'Completado',
       'cancelado': 'Cancelado'
@@ -1562,11 +1564,11 @@ function Servicios() {
                                   onClick={() => handleQuitarRepuesto(repuesto.id)}
                                 >
                                   <DeleteIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                            </Box>
-                          </TableCell>
-                        </TableRow>
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </TableCell>
+              </TableRow>
                       ))
                     ) : (
                       <TableRow>
@@ -1592,9 +1594,9 @@ function Servicios() {
                         <TableCell />
                       </TableRow>
                     )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+          </TableBody>
+        </Table>
+      </TableContainer>
             </Box>
           )}
 
@@ -1931,6 +1933,7 @@ function Servicios() {
                   >
                     <MenuItem value="pendiente">Pendiente</MenuItem>
                     <MenuItem value="diagnostico">En Diagnóstico</MenuItem>
+                    <MenuItem value="aprobado">Aprobado</MenuItem>
                     <MenuItem value="en_progreso">En Progreso</MenuItem>
                     <MenuItem value="pausado">Pausado</MenuItem>
                     <MenuItem value="completado">Completado</MenuItem>
@@ -2007,20 +2010,20 @@ function Servicios() {
         open={dialogRepuestoAbierto}
         onClose={() => setDialogRepuestoAbierto(false)}
         maxWidth="xs"
-        fullWidth
-      >
+              fullWidth
+            >
         <DialogTitle>Editar Cantidad de Repuesto</DialogTitle>
         <DialogContent>
           {repuestoAEditar && (
             <Box sx={{ pt: 1 }}>
               <Typography variant="subtitle1" gutterBottom>
                 {repuestoAEditar.nombre}
-              </Typography>
-              <TextField
+        </Typography>
+            <TextField
                 autoFocus
                 margin="dense"
                 label="Nueva cantidad"
-                type="number"
+              type="number"
                 fullWidth
                 value={nuevaCantidad}
                 onChange={(e) => {
@@ -2032,8 +2035,8 @@ function Servicios() {
                     setNuevaCantidad(1);
                   }
                 }}
-                inputProps={{ min: 1 }}
-              />
+              inputProps={{ min: 1 }}
+            />
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
                 Cantidad actual: {repuestoAEditar.cantidad} unidades
               </Typography>
@@ -2045,13 +2048,13 @@ function Servicios() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogRepuestoAbierto(false)}>Cancelar</Button>
-          <Button 
+            <Button
             onClick={actualizarCantidadRepuesto} 
-            variant="contained"
-            color="primary"
-          >
+              variant="contained"
+              color="primary"
+            >
             Actualizar
-          </Button>
+            </Button>
         </DialogActions>
       </Dialog>
 

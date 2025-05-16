@@ -3,6 +3,7 @@ from flask_jwt_extended import JWTManager
 from extensions import db
 from middleware import setup_cors, handle_preflight
 from flask_cors import CORS
+from flask_migrate import Migrate
 import logging
 from datetime import timedelta
 from blueprints.auth import auth_bp
@@ -31,6 +32,7 @@ def create_app():
     
     # Inicializar extensiones
     db.init_app(app)
+    migrate = Migrate(app, db)
     jwt = JWTManager(app)
     
     # Configurar CORS

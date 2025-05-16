@@ -43,10 +43,24 @@ import {
   Build as BuildIcon,
   Visibility as VisibilityIcon,
   History as HistoryIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getVehiculos, getVehiculo, getClientes, updateVehiculo, createVehiculo, deleteVehiculo } from '../services/api';
+
+// Agregar la función formatEstadoLabel
+const formatEstadoLabel = (estado) => {
+  const estados = {
+    'pendiente': 'Pendiente',
+    'en_progreso': 'En Progreso',
+    'diagnostico': 'En Diagnóstico',
+    'completado': 'Completado',
+    'pausado': 'Pausado',
+    'cancelado': 'Cancelado'
+  };
+  return estados[estado] || estado;
+};
 
 function Vehiculos() {
   const navigate = useNavigate();
@@ -75,6 +89,8 @@ function Vehiculos() {
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
   const [openServiciosDialog, setOpenServiciosDialog] = useState(false);
   const [vehiculoSeleccionado, setVehiculoSeleccionado] = useState(null);
+  const [dialogoVehiculoAbierto, setDialogoVehiculoAbierto] = useState(false);
+  const [vehiculoDetalle, setVehiculoDetalle] = useState(null);
 
   useEffect(() => {
     cargarVehiculos();
@@ -83,22 +99,22 @@ function Vehiculos() {
     // Manejar la navegación desde el módulo de Clientes
     const searchParams = new URLSearchParams(location.search);
     const vehiculoId = searchParams.get('vehiculo');
-    const clienteId = location.state?.clienteId;
-    const clienteNombre = location.state?.clienteNombre;
+    const clienteData = location.state;
 
     if (vehiculoId) {
       const vehiculo = vehiculos.find(v => v.id === parseInt(vehiculoId));
       if (vehiculo) {
         handleOpenDialog(vehiculo);
       }
-    } else if (clienteId) {
+    } else if (clienteData?.id) {
+      console.log('Datos del cliente recibidos:', clienteData);
       setClienteSeleccionado({
-        id: clienteId,
-        nombre: clienteNombre
+        id: clienteData.id,
+        nombre: `${clienteData.nombre} ${clienteData.apellido}`
       });
       setVehiculoActual(prev => ({
         ...prev,
-        cliente_id: clienteId
+        cliente_id: clienteData.id
       }));
       handleOpenDialog();
     }
@@ -154,7 +170,20 @@ function Vehiculos() {
 
   const handleOpenDialog = (vehiculo = null) => {
     if (vehiculo) {
-      setVehiculoActual(vehiculo);
+      if (dialogoVehiculoAbierto) {
+        setDialogoVehiculoAbierto(false);
+        // Pequeño delay para asegurar que la modal de detalles se cierre completamente
+        setTimeout(() => {
+          setVehiculoActual({
+            ...vehiculo,
+            cliente_id: vehiculo.cliente?.id || ''
+          });
+          setOpenDialog(true);
+        }, 100);
+      } else {
+        setVehiculoDetalle(vehiculo);
+        setDialogoVehiculoAbierto(true);
+      }
     } else {
       setVehiculoActual({
         marca: '',
@@ -164,13 +193,10 @@ function Vehiculos() {
         color: '',
         cliente_id: '',
         kilometraje: '',
-        ultimo_servicio: '',
-        vin: '',
-        tipo_combustible: '',
-        transmision: '',
+        ultima_revision: ''
       });
+      setOpenDialog(true);
     }
-    setOpenDialog(true);
   };
 
   const handleCloseDialog = () => {
@@ -197,6 +223,7 @@ function Vehiculos() {
         ...vehiculoActual,
         año: vehiculoActual.año ? parseInt(vehiculoActual.año) : null,
         kilometraje: vehiculoActual.kilometraje ? parseFloat(vehiculoActual.kilometraje) : null,
+        cliente_id: vehiculoActual.cliente_id || clienteSeleccionado?.id,
         // Convertir strings vacíos a null para campos opcionales
         color: vehiculoActual.color || null,
         tipo_combustible: vehiculoActual.tipo_combustible || null,
@@ -204,6 +231,8 @@ function Vehiculos() {
         vin: vehiculoActual.vin || null,
         ultimo_servicio: vehiculoActual.ultimo_servicio || null
       };
+
+      console.log('Enviando datos del vehículo:', datosVehiculo);
 
       if (vehiculoActual.id) {
         await updateVehiculo(vehiculoActual.id, datosVehiculo);
@@ -215,6 +244,7 @@ function Vehiculos() {
       handleCloseDialog();
       cargarVehiculos();
     } catch (error) {
+      console.error('Error al guardar vehículo:', error);
       setError(error.message);
     } finally {
       setLoading(false);
@@ -222,16 +252,44 @@ function Vehiculos() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('¿Está seguro de eliminar este vehículo?')) {
-      return;
-    }
-
     try {
-      await deleteVehiculo(id);
+      // Verificar si el vehículo tiene servicios asociados
+      const vehiculo = vehiculos.find(v => v.id === id);
+      if (vehiculo?.servicios?.length > 0) {
+        setError('No se puede eliminar el vehículo porque tiene servicios asociados. Por favor, elimine primero los servicios.');
+        return;
+      }
+
+      if (!window.confirm('¿Está seguro de eliminar este vehículo?')) {
+        return;
+      }
+
+      setLoading(true);
+      const response = await fetch(`http://localhost:5000/api/vehiculos/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error al eliminar el vehículo');
+      }
+
       setSuccess('Vehículo eliminado exitosamente');
-      cargarVehiculos();
+      
+      // Cerrar la modal de detalles si está abierta
+      if (dialogoVehiculoAbierto) {
+        setDialogoVehiculoAbierto(false);
+      }
+      
+      // Actualizar la lista de vehículos
+      await cargarVehiculos();
     } catch (error) {
       setError(error.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -414,19 +472,9 @@ function Vehiculos() {
                 </TableCell>
                 <TableCell>
                   <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Tooltip title="Ver servicios">
-                      <IconButton onClick={() => handleVerServicios(vehiculo)}>
-                        <BuildIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Editar">
+                    <Tooltip title="Ver detalles">
                       <IconButton onClick={() => handleOpenDialog(vehiculo)}>
-                        <EditIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Eliminar">
-                      <IconButton onClick={() => handleDelete(vehiculo.id)}>
-                        <DeleteIcon />
+                        <VisibilityIcon />
                       </IconButton>
                     </Tooltip>
                   </Box>
@@ -729,6 +777,237 @@ function Vehiculos() {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseServiciosDialog}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog 
+        open={dialogoVehiculoAbierto} 
+        onClose={() => setDialogoVehiculoAbierto(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', px: 2, py: 1.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">
+              Detalles del Vehículo
+            </Typography>
+            <IconButton 
+              color="inherit" 
+              onClick={() => setDialogoVehiculoAbierto(false)}
+              aria-label="cerrar diálogo"
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        
+        <DialogContent dividers sx={{ p: 3 }}>
+          {vehiculoDetalle && (
+            <Grid container spacing={3}>
+              {/* Información del Vehículo */}
+              <Grid item xs={12} md={6}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+                    Información del Vehículo
+                  </Typography>
+                  <Box sx={{ mt: 2 }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Marca:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{vehiculoDetalle.marca}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Modelo:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{vehiculoDetalle.modelo}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Año:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{vehiculoDetalle.año}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Placa:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{vehiculoDetalle.placa}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Color:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{vehiculoDetalle.color}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Kilometraje:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{vehiculoDetalle.kilometraje} km</Typography>
+                      </Grid>
+                    </Grid>
+                  </Box>
+                </Paper>
+              </Grid>
+              
+              {/* Información del Cliente */}
+              <Grid item xs={12} md={6}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+                    Información del Cliente
+                  </Typography>
+                  <Box sx={{ mt: 2 }}>
+                    {vehiculoDetalle.cliente ? (
+                      <Grid container spacing={2}>
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Nombre:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {vehiculoDetalle.cliente.nombre} {vehiculoDetalle.cliente.apellido}
+                          </Typography>
+                        </Grid>
+                        
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Email:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">{vehiculoDetalle.cliente.email}</Typography>
+                        </Grid>
+                        
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Teléfono:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">{vehiculoDetalle.cliente.telefono}</Typography>
+                        </Grid>
+                      </Grid>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No hay cliente asignado
+                      </Typography>
+                    )}
+                  </Box>
+                </Paper>
+              </Grid>
+              
+              {/* Historial de Servicios */}
+              <Grid item xs={12}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+                    Historial de Servicios
+                  </Typography>
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Fecha</TableCell>
+                          <TableCell>Tipo</TableCell>
+                          <TableCell>Descripción</TableCell>
+                          <TableCell>Estado</TableCell>
+                          <TableCell>Mecánico</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {vehiculoDetalle.servicios?.map((servicio) => (
+                          <TableRow key={servicio.id}>
+                            <TableCell>
+                              {new Date(servicio.fecha_inicio).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell>{servicio.tipo_servicio}</TableCell>
+                            <TableCell>{servicio.descripcion}</TableCell>
+                            <TableCell>
+                              <Chip
+                                label={formatEstadoLabel(servicio.estado)}
+                                color={
+                                  servicio.estado === 'completado' ? 'success' :
+                                  servicio.estado === 'en_progreso' ? 'warning' :
+                                  servicio.estado === 'diagnostico' ? 'info' :
+                                  servicio.estado === 'pausado' ? 'secondary' :
+                                  servicio.estado === 'cancelado' ? 'error' : 
+                                  'primary'
+                                }
+                                size="small"
+                                sx={{ 
+                                  fontWeight: 'medium',
+                                  '&.MuiChip-colorSuccess': {
+                                    bgcolor: '#4CAF50',
+                                    color: 'white'
+                                  },
+                                  '&.MuiChip-colorWarning': {
+                                    bgcolor: '#FF9800',
+                                    color: 'white'
+                                  },
+                                  '&.MuiChip-colorInfo': {
+                                    bgcolor: '#2196F3',
+                                    color: 'white'
+                                  },
+                                  '&.MuiChip-colorSecondary': {
+                                    bgcolor: '#9C27B0',
+                                    color: 'white'
+                                  },
+                                  '&.MuiChip-colorError': {
+                                    bgcolor: '#F44336',
+                                    color: 'white'
+                                  },
+                                  '&.MuiChip-colorPrimary': {
+                                    bgcolor: '#3F51B5',
+                                    color: 'white'
+                                  }
+                                }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {servicio.mecanico ? 
+                                `${servicio.mecanico.nombre} ${servicio.mecanico.apellido}` : 
+                                'Sin asignar'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Paper>
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button 
+            onClick={() => setDialogoVehiculoAbierto(false)} 
+            color="inherit"
+          >
+            Cerrar
+          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button 
+              variant="contained" 
+              color="primary"
+              onClick={() => handleOpenDialog(vehiculoDetalle)}
+              startIcon={<EditIcon />}
+              disabled={loading}
+            >
+              Editar
+            </Button>
+            <Button 
+              variant="contained" 
+              color="error"
+              onClick={() => handleDelete(vehiculoDetalle.id)}
+              startIcon={<DeleteIcon />}
+              disabled={loading}
+            >
+              Eliminar
+            </Button>
+          </Box>
         </DialogActions>
       </Dialog>
 

@@ -41,6 +41,8 @@ import {
   Category as CategoryIcon,
   QrCodeScanner as ScannerIcon,
   Autorenew as AutoGenerateIcon,
+  Visibility as VisibilityIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 
 function Inventario() {
@@ -89,6 +91,9 @@ function Inventario() {
   const [isScanning, setIsScanning] = useState(false);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+
+  const [dialogoRepuestoAbierto, setDialogoRepuestoAbierto] = useState(false);
+  const [repuestoDetalle, setRepuestoDetalle] = useState(null);
 
   useEffect(() => {
     cargarRepuestos();
@@ -226,10 +231,19 @@ function Inventario() {
 
   const handleOpenDialog = (repuesto = null) => {
     if (repuesto) {
-      setRepuestoActual({
-        ...repuesto,
-        stock: repuesto.stock_actual || repuesto.stock || 0
-      });
+      if (dialogoRepuestoAbierto) {
+        setDialogoRepuestoAbierto(false);
+        setTimeout(() => {
+          setRepuestoActual({
+            ...repuesto,
+            stock: repuesto.stock_actual || repuesto.stock || 0
+          });
+          setOpenDialog(true);
+        }, 100);
+      } else {
+        setRepuestoDetalle(repuesto);
+        setDialogoRepuestoAbierto(true);
+      }
     } else {
       setRepuestoActual({
         codigo: '',
@@ -244,8 +258,8 @@ function Inventario() {
         categoria: categorias[0] || '',
         ubicacion: '',
       });
+      setOpenDialog(true);
     }
-    setOpenDialog(true);
   };
 
   const handleCloseDialog = () => {

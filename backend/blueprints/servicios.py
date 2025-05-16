@@ -166,11 +166,14 @@ def get_servicios():
                 'fecha_estimada_fin': s.fecha_estimada_fin.isoformat() if s.fecha_estimada_fin else None,
                 'costo_estimado': s.costo_estimado,
                 'costo_real': s.costo_real,
-                'cliente': {
-                    'id': s.cliente.id,
-                    'nombre': f"{s.cliente.nombre} {s.cliente.apellido}",
-                    'email': s.cliente.email
-                } if s.cliente else None,
+                'honorarios': s.honorarios,
+                'kilometraje_entrada': s.kilometraje_entrada,
+                'kilometraje_salida': s.kilometraje_salida,
+                'nivel_combustible_entrada': s.nivel_combustible_entrada,
+                'nivel_combustible_salida': s.nivel_combustible_salida,
+                'diagnostico': s.diagnostico,
+                'recomendaciones': s.recomendaciones,
+                'notas': s.notas,
                 'vehiculo': {
                     'id': s.vehiculo.id,
                     'placa': s.vehiculo.placa,
@@ -185,7 +188,6 @@ def get_servicios():
                 } if s.mecanico else None,
                 'total_horas': sum(h.horas_trabajadas for h in s.horas_trabajo.all()),
                 'total_repuestos': len(s.repuestos),
-                'notas': s.notas
             } for s in servicios]
         }), 200
         
@@ -203,33 +205,43 @@ def get_servicio(id):
             'id': servicio.id,
             'tipo_servicio': servicio.tipo_servicio,
             'descripcion': servicio.descripcion,
+            'estado': servicio.estado,
+            'prioridad': servicio.prioridad,
             'fecha_inicio': servicio.fecha_inicio.isoformat() if servicio.fecha_inicio else None,
             'fecha_fin': servicio.fecha_fin.isoformat() if servicio.fecha_fin else None,
-            'estado': servicio.estado,
+            'fecha_estimada_fin': servicio.fecha_estimada_fin.isoformat() if servicio.fecha_estimada_fin else None,
+            'costo_estimado': servicio.costo_estimado,
+            'costo_real': servicio.costo_real,
+            'honorarios': servicio.honorarios,
+            'kilometraje_entrada': servicio.kilometraje_entrada,
+            'kilometraje_salida': servicio.kilometraje_salida,
+            'nivel_combustible_entrada': servicio.nivel_combustible_entrada,
+            'nivel_combustible_salida': servicio.nivel_combustible_salida,
+            'diagnostico': servicio.diagnostico,
+            'recomendaciones': servicio.recomendaciones,
+            'notas': servicio.notas,
             'vehiculo': {
                 'id': servicio.vehiculo.id,
                 'placa': servicio.vehiculo.placa,
                 'marca': servicio.vehiculo.marca,
                 'modelo': servicio.vehiculo.modelo,
-                'año': servicio.vehiculo.año,
-                'color': servicio.vehiculo.color,
-                'vin': servicio.vehiculo.vin
+                'año': servicio.vehiculo.año
             } if servicio.vehiculo else None,
             'mecanico': {
                 'id': servicio.mecanico.id,
                 'nombre': f"{servicio.mecanico.nombre} {servicio.mecanico.apellido}",
                 'especialidad': servicio.mecanico.especialidad,
-                'tarifa_hora': getattr(servicio.mecanico, 'tarifa_hora', 0)
+                'tarifa_hora': servicio.mecanico.tarifa_hora
             } if servicio.mecanico else None,
             'repuestos': [{
                 'id': r.id,
                 'codigo': r.codigo,
                 'nombre': r.nombre,
-                'cantidad': next((mov.cantidad for mov in servicio.movimientos_inventario.all() 
-                                if mov.repuesto_id == r.id), 0),
-                'precio_unitario': r.precio_venta,
-                'subtotal': next((mov.cantidad * r.precio_venta for mov in servicio.movimientos_inventario.all() 
-                                if mov.repuesto_id == r.id), 0)
+                'cantidad': sum(m.cantidad for m in servicio.movimientos_inventario.all() 
+                                if m.repuesto_id == r.id),
+                'precio': r.precio_venta,
+                'subtotal': sum(m.cantidad * r.precio_venta for m in servicio.movimientos_inventario.all() 
+                                if m.repuesto_id == r.id)
             } for r in servicio.repuestos],
             'horas_trabajo': [{
                 'id': h.id,
@@ -248,6 +260,7 @@ def get_servicio(id):
             } if servicio.vehiculo and servicio.vehiculo.cliente else None
         }), 200
     except Exception as e:
+        print(f"Error en get_servicio: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @servicios_bp.route('/', methods=['POST'])
@@ -353,7 +366,7 @@ def update_servicio(id):
             'costo_estimado', 'diagnostico', 'recomendaciones', 'notas',
             'kilometraje_entrada', 'kilometraje_salida',
             'nivel_combustible_entrada', 'nivel_combustible_salida',
-            'estado'  # Agregar estado a los campos actualizables
+            'estado', 'honorarios'  # Aseguramos que honorarios está incluido
         ]
         
         # Guardar el estado anterior antes de actualizarlo
@@ -362,7 +375,7 @@ def update_servicio(id):
         for field in updateable_fields:
             if field in data:
                 if field in ['fecha_estimada_fin'] and data[field]:
-                    setattr(servicio, field, datetime.fromisoformat(data[field]))
+                    setattr(servicio, field, datetime.fromisoformat(data[field].replace('Z', '+00:00')))
                 else:
                     setattr(servicio, field, data[field])
         
@@ -397,12 +410,25 @@ def update_servicio(id):
         
         db.session.commit()
         
+        # Devolver respuesta con datos completos del servicio
         return jsonify({
             'mensaje': 'Servicio actualizado exitosamente',
             'servicio': {
                 'id': servicio.id,
                 'tipo_servicio': servicio.tipo_servicio,
-                'estado': servicio.estado
+                'estado': servicio.estado,
+                'honorarios': servicio.honorarios,
+                'descripcion': servicio.descripcion,
+                'fecha_inicio': servicio.fecha_inicio.isoformat() if servicio.fecha_inicio else None,
+                'fecha_fin': servicio.fecha_fin.isoformat() if servicio.fecha_fin else None,
+                'fecha_estimada_fin': servicio.fecha_estimada_fin.isoformat() if servicio.fecha_estimada_fin else None,
+                'costo_estimado': servicio.costo_estimado,
+                'costo_real': servicio.costo_real,
+                'mecanico': {
+                    'id': servicio.mecanico.id,
+                    'nombre': f"{servicio.mecanico.nombre} {servicio.mecanico.apellido}",
+                    'especialidad': servicio.mecanico.especialidad
+                } if servicio.mecanico else None
             }
         }), 200
         
@@ -1103,22 +1129,27 @@ def obtener_estados():
             'pendiente': {
                 'nombre': 'Pendiente',
                 'descripcion': 'Servicio creado y pendiente de iniciar',
-                'siguientes': ['en_diagnostico', 'cancelado']
+                'siguientes': ['diagnostico', 'cancelado']
             },
-            'en_diagnostico': {
+            'diagnostico': {
                 'nombre': 'En Diagnóstico',
                 'descripcion': 'El vehículo está siendo diagnosticado',
-                'siguientes': ['en_reparacion', 'cancelado']
+                'siguientes': ['aprobado', 'cancelado']
             },
-            'en_reparacion': {
-                'nombre': 'En Reparación',
+            'aprobado': {
+                'nombre': 'Aprobado',
+                'descripcion': 'Servicio aprobado para iniciar',
+                'siguientes': ['en_progreso', 'cancelado']
+            },
+            'en_progreso': {
+                'nombre': 'En Progreso',
                 'descripcion': 'El vehículo está siendo reparado',
-                'siguientes': ['en_revision', 'cancelado']
+                'siguientes': ['pausado', 'completado', 'cancelado']
             },
-            'en_revision': {
-                'nombre': 'En Revisión',
-                'descripcion': 'El vehículo está siendo revisado después de la reparación',
-                'siguientes': ['completado', 'en_reparacion']
+            'pausado': {
+                'nombre': 'Pausado',
+                'descripcion': 'Trabajo temporalmente suspendido',
+                'siguientes': ['en_progreso', 'cancelado']
             },
             'completado': {
                 'nombre': 'Completado',
