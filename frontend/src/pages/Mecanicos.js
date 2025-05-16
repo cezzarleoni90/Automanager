@@ -34,6 +34,7 @@ import {
   ListItem,
   ListItemText,
   Divider,
+  Pagination,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -96,6 +97,16 @@ function Mecanicos() {
   const [mecanicoSeleccionado, setMecanicoSeleccionado] = useState('');
   const [servicioActual, setServicioActual] = useState(null);
   const [honorariosEditando, setHonorariosEditando] = useState({});
+  const [pagination, setPagination] = useState({
+    page: 1,
+    per_page: 10,
+    total: 0,
+    total_pages: 0
+  });
+  const [filtros, setFiltros] = useState({
+    estado: '',
+    search: ''
+  });
 
   const especialidades = [
     'Mecánica General',
@@ -175,13 +186,19 @@ function Mecanicos() {
           const serviciosData = await serviciosResponse.json();
           const serviciosMecanico = serviciosData.servicios || [];
 
+          // Asegurarse de que los honorarios sean números
+          const serviciosFormateados = serviciosMecanico.map(servicio => ({
+            ...servicio,
+            honorarios: servicio.honorarios ? Number(servicio.honorarios) : 0
+          }));
+
           // Filtrar servicios activos
-          const serviciosActivos = serviciosMecanico.filter(servicio => 
+          const serviciosActivos = serviciosFormateados.filter(servicio => 
             ['pendiente', 'diagnostico', 'aprobado', 'en_progreso', 'pausado'].includes(servicio.estado)
           );
 
           console.log(`Mecánico ${mecanico.nombre} ${mecanico.apellido} (ID: ${mecanico.id}):`, {
-            totalServicios: serviciosMecanico.length,
+            totalServicios: serviciosFormateados.length,
             serviciosActivos: serviciosActivos.length,
             servicios: serviciosActivos
           });
@@ -189,7 +206,7 @@ function Mecanicos() {
           return {
             ...mecanico,
             servicios_activos: serviciosActivos.length,
-            servicios: serviciosActivos
+            servicios: serviciosFormateados
           };
         } catch (error) {
           console.error(`Error al cargar servicios del mecánico ${mecanico.id}:`, error);
@@ -394,32 +411,93 @@ function Mecanicos() {
     }
   };
 
-  const handleOpenDialog = (mecanico = null) => {
+  const handleOpenDialog = async (mecanico = null) => {
     if (mecanico) {
-      if (dialogoMecanicoAbierto) {
-        setDialogoMecanicoAbierto(false);
-        setTimeout(() => {
-          setMecanicoActual({
-            ...mecanico,
-            tarifa_hora: mecanico.tarifa_hora || 0
-          });
-          setOpenDialog(true);
-        }, 100);
-      } else {
-        setMecanicoDetalle(mecanico);
-        setDialogoMecanicoAbierto(true);
-      }
+        try {
+            // Obtener los datos actualizados del mecánico
+            const response = await fetch(`http://localhost:5000/api/mecanicos/${mecanico.id}`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Error al obtener detalles del mecánico');
+            }
+
+            const data = await response.json();
+            
+            // Obtener servicios activos del mecánico
+            const serviciosResponse = await fetch(`http://localhost:5000/api/mecanicos/${mecanico.id}/servicios`, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
+
+            if (!serviciosResponse.ok) {
+                throw new Error('Error al obtener servicios del mecánico');
+            }
+
+            const serviciosData = await serviciosResponse.json();
+            const serviciosFormateados = serviciosData.servicios.map(servicio => ({
+                ...servicio,
+                honorarios: servicio.honorarios ? Number(servicio.honorarios) : 0
+            }));
+
+            // Filtrar servicios activos
+            const serviciosActivos = serviciosFormateados.filter(servicio => 
+                ['pendiente', 'diagnostico', 'aprobado', 'en_progreso', 'pausado'].includes(servicio.estado)
+            );
+
+            // Calcular ingresos del mes actual
+            const fechaActual = new Date();
+            const primerDiaMes = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), 1);
+            const ultimoDiaMes = new Date(fechaActual.getFullYear(), fechaActual.getMonth() + 1, 0);
+
+            const ingresosMes = serviciosFormateados.reduce((total, servicio) => {
+                const fechaServicio = new Date(servicio.fecha_inicio);
+                if (fechaServicio >= primerDiaMes && fechaServicio <= ultimoDiaMes) {
+                    return total + (servicio.honorarios || 0);
+                }
+                return total;
+            }, 0);
+
+            // Actualizar el estado con los datos completos
+            const mecanicoCompleto = {
+                ...data,
+                servicios: serviciosFormateados,
+                servicios_activos: serviciosActivos.length,
+                ingresos_generados_mes: ingresosMes
+            };
+            
+            if (dialogoMecanicoAbierto) {
+                setDialogoMecanicoAbierto(false);
+                setTimeout(() => {
+                    setMecanicoActual({
+                        ...mecanicoCompleto,
+                        tarifa_hora: mecanicoCompleto.tarifa_hora || 0
+                    });
+                    setOpenDialog(true);
+                }, 100);
+            } else {
+                setMecanicoDetalle(mecanicoCompleto);
+                setDialogoMecanicoAbierto(true);
+            }
+        } catch (error) {
+            console.error('Error al cargar detalles del mecánico:', error);
+            setError('Error al cargar los detalles del mecánico');
+        }
     } else {
-      setMecanicoActual({
-        nombre: '',
-        apellido: '',
-        email: '',
-        telefono: '',
-        especialidad: '',
-        tarifa_hora: '',
-        estado: 'activo'
-      });
-      setOpenDialog(true);
+        setMecanicoActual({
+            nombre: '',
+            apellido: '',
+            email: '',
+            telefono: '',
+            especialidad: '',
+            tarifa_hora: '',
+            estado: 'activo'
+        });
+        setOpenDialog(true);
     }
   };
 
@@ -665,8 +743,9 @@ function Mecanicos() {
   const formatearNumero = (numero) => {
     if (numero === undefined || numero === null) return '0,00';
     return numero.toLocaleString('es-ES', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+        useGrouping: true
     });
   };
 
@@ -686,86 +765,206 @@ function Mecanicos() {
     }));
   };
 
-  const handleGuardarHonorarios = async (servicioId) => {
-    const valor = honorariosEditando[servicioId];
-    if (valor !== undefined) {
-      const nuevosHonorarios = parsearNumero(valor);
-      await actualizarHonorarios(servicioId, nuevosHonorarios);
-      setHonorariosEditando(prev => {
-        const nuevo = { ...prev };
-        delete nuevo[servicioId];
-        return nuevo;
-      });
+  const actualizarHonorarios = async (servicioId, nuevosHonorarios) => {
+    try {
+        console.log('Iniciando actualización de honorarios:', { servicioId, nuevosHonorarios });
+        
+        const honorariosNumerico = Number(nuevosHonorarios);
+        if (isNaN(honorariosNumerico)) {
+            throw new Error('El valor de honorarios no es válido');
+        }
+
+        const response = await fetch(`http://localhost:5000/api/servicios/${servicioId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({
+                honorarios: honorariosNumerico
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Error al actualizar honorarios');
+        }
+
+        const data = await response.json();
+
+        // Actualizar el servicio en la lista local
+        setServiciosMecanico(prevServicios => 
+            prevServicios.map(s => 
+                s.id === servicioId 
+                    ? { ...s, honorarios: honorariosNumerico }
+                    : s
+            )
+        );
+
+        // Actualizar también en el estado global de servicios
+        setServicios(prevServicios =>
+            prevServicios.map(s =>
+                s.id === servicioId
+                    ? { ...s, honorarios: honorariosNumerico }
+                    : s
+            )
+        );
+
+        // Si estamos en el diálogo de detalles del mecánico, actualizar también ahí
+        if (mecanicoDetalle) {
+            // Calcular nuevos ingresos del mes
+            const fechaActual = new Date();
+            const primerDiaMes = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), 1);
+            const ultimoDiaMes = new Date(fechaActual.getFullYear(), fechaActual.getMonth() + 1, 0);
+
+            const serviciosActualizados = mecanicoDetalle.servicios.map(s =>
+                s.id === servicioId
+                    ? { ...s, honorarios: honorariosNumerico }
+                    : s
+            );
+
+            const ingresosMes = serviciosActualizados.reduce((total, servicio) => {
+                const fechaServicio = new Date(servicio.fecha_inicio);
+                if (fechaServicio >= primerDiaMes && fechaServicio <= ultimoDiaMes) {
+                    return total + (servicio.honorarios || 0);
+                }
+                return total;
+            }, 0);
+
+            setMecanicoDetalle(prev => ({
+                ...prev,
+                servicios: serviciosActualizados,
+                ingresos_generados_mes: ingresosMes
+            }));
+        }
+
+        // Actualizar el estado de edición
+        setHonorariosEditando(prev => {
+            const nuevo = { ...prev };
+            delete nuevo[servicioId];
+            return nuevo;
+        });
+
+        setSuccess('Honorarios actualizados correctamente');
+        return true;
+    } catch (error) {
+        console.error('Error al actualizar honorarios:', error);
+        setError(error.message);
+        throw error;
     }
   };
 
-  const actualizarHonorarios = async (servicioId, nuevosHonorarios) => {
+  const handleGuardarHonorarios = async (servicioId) => {
+    const valor = honorariosEditando[servicioId];
+    if (valor !== undefined) {
+        try {
+            // Limpiar el valor de cualquier formato
+            const valorLimpio = valor.replace(/[^\d.,]/g, '').replace(',', '.');
+            const nuevosHonorarios = parseFloat(valorLimpio);
+            
+            if (isNaN(nuevosHonorarios)) {
+                throw new Error('El valor de honorarios no es válido');
+            }
+
+            console.log('Guardando honorarios:', {
+                servicioId,
+                valorOriginal: valor,
+                valorLimpio,
+                nuevosHonorarios
+            });
+
+            // Actualizar los honorarios
+            await actualizarHonorarios(servicioId, nuevosHonorarios);
+            
+            // Recargar los servicios del mecánico actual
+            if (mecanicoDetalle) {
+                const serviciosResponse = await fetch(`http://localhost:5000/api/mecanicos/${mecanicoDetalle.id}/servicios`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+
+                if (!serviciosResponse.ok) {
+                    throw new Error('Error al recargar servicios');
+                }
+
+                const serviciosData = await serviciosResponse.json();
+                const serviciosFormateados = serviciosData.servicios.map(servicio => ({
+                    ...servicio,
+                    honorarios: servicio.honorarios ? Number(servicio.honorarios) : 0
+                }));
+
+                // Actualizar el estado del mecánico con los servicios actualizados
+                setMecanicoDetalle(prev => ({
+                    ...prev,
+                    servicios: serviciosFormateados
+                }));
+            }
+
+            // Limpiar el estado de edición
+            setHonorariosEditando(prev => {
+                const nuevo = { ...prev };
+                delete nuevo[servicioId];
+                return nuevo;
+            });
+
+            setSuccess('Honorarios actualizados correctamente');
+        } catch (error) {
+            console.error('Error al guardar honorarios:', error);
+            setError(error.message);
+        }
+    }
+  };
+
+  const cargarServiciosMecanico = async (mecanicoId, page = 1, filtros = {}) => {
     try {
-      console.log('🔄 Actualizando honorarios:', { servicioId, nuevosHonorarios });
+      console.log('🔄 Cargando servicios del mecánico:', { mecanicoId, page, filtros });
       
-      // Actualizar el servicio en el backend
-      const response = await fetch(`http://localhost:5000/api/servicios/${servicioId}`, {
-        method: 'PUT',
+      const queryParams = new URLSearchParams({
+        page: page,
+        per_page: pagination.per_page,
+        ...filtros
+      });
+
+      const response = await fetch(`http://localhost:5000/api/mecanicos/${mecanicoId}/servicios?${queryParams}`, {
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ honorarios: nuevosHonorarios })
+        }
       });
 
       if (!response.ok) {
-        throw new Error('Error al actualizar honorarios');
+        throw new Error('Error al cargar servicios del mecánico');
       }
 
       const data = await response.json();
-      console.log('📦 Servicio actualizado:', data);
+      console.log('📦 Servicios recibidos:', data);
 
-      // Actualizar el estado local de servicios
-      setServicios(prevServicios => {
-        const serviciosActualizados = prevServicios.map(s => 
-          s.id === servicioId ? { ...s, honorarios: nuevosHonorarios } : s
-        );
-        return serviciosActualizados;
+      // Formatear los servicios
+      const serviciosFormateados = data.servicios.map(servicio => ({
+        ...servicio,
+        honorarios: servicio.honorarios ? Number(servicio.honorarios) : 0
+      }));
+
+      setServiciosMecanico(serviciosFormateados);
+      setPagination({
+        page: data.page,
+        per_page: data.per_page,
+        total: data.total,
+        total_pages: data.total_pages
       });
-
-      // Actualizar el estado del mecánico detalle
-      if (mecanicoDetalle && mecanicoDetalle.servicios) {
-        const serviciosActualizados = mecanicoDetalle.servicios.map(s => 
-          s.id === servicioId ? { ...s, honorarios: nuevosHonorarios } : s
-        );
-
-        const ingresosTotales = calcularIngresosTotales(serviciosActualizados);
-        console.log('💰 Ingresos totales calculados:', ingresosTotales);
-
-        setMecanicoDetalle(prev => ({
-          ...prev,
-          servicios: serviciosActualizados,
-          ingresos_generados_mes: ingresosTotales
-        }));
-
-        // Actualizar estadísticas
-        setEstadisticas(prev => ({
-          ...prev,
-          ingresos_generados_mes: ingresosTotales
-        }));
-      }
-
-      // Recargar los servicios para asegurar que los datos estén actualizados
-      await cargarServicios();
-      
-      // Si estamos en el diálogo de servicios, recargar los servicios del mecánico
-      if (openServiciosDialog) {
-        await obtenerServiciosMecanico(mecanicoActual.id);
-      }
-
-      // Recargar los mecánicos para actualizar los totales
-      await cargarMecanicos();
-
-      setSuccess('Honorarios actualizados correctamente');
     } catch (error) {
-      console.error('❌ Error al actualizar honorarios:', error);
-      setError('Error al actualizar honorarios');
+      console.error('❌ Error al cargar servicios:', error);
+      setError(error.message);
     }
+  };
+
+  const handlePageChange = (event, newPage) => {
+    cargarServiciosMecanico(mecanicoActual.id, newPage + 1, filtros);
+  };
+
+  const handleFiltrosChange = (nuevosFiltros) => {
+    setFiltros(nuevosFiltros);
+    cargarServiciosMecanico(mecanicoActual.id, 1, nuevosFiltros);
   };
 
   if (loading) {
@@ -1044,6 +1243,44 @@ function Mecanicos() {
           Servicios de {mecanicoActual.nombre} {mecanicoActual.apellido}
         </DialogTitle>
         <DialogContent>
+          <Box sx={{ mb: 2 }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Buscar servicios"
+                  value={filtros.search}
+                  onChange={(e) => handleFiltrosChange({ ...filtros, search: e.target.value })}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Estado</InputLabel>
+                  <Select
+                    value={filtros.estado}
+                    onChange={(e) => handleFiltrosChange({ ...filtros, estado: e.target.value })}
+                    label="Estado"
+                  >
+                    <MenuItem value="">Todos</MenuItem>
+                    <MenuItem value="pendiente">Pendiente</MenuItem>
+                    <MenuItem value="diagnostico">Diagnóstico</MenuItem>
+                    <MenuItem value="en_progreso">En Progreso</MenuItem>
+                    <MenuItem value="pausado">Pausado</MenuItem>
+                    <MenuItem value="completado">Completado</MenuItem>
+                    <MenuItem value="cancelado">Cancelado</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
+          </Box>
+
           <TableContainer component={Paper}>
             <Table>
               <TableHead>
@@ -1116,6 +1353,17 @@ function Mecanicos() {
               </TableBody>
             </Table>
           </TableContainer>
+
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+            <Pagination
+              count={pagination.total_pages}
+              page={pagination.page}
+              onChange={handlePageChange}
+              color="primary"
+              showFirstButton
+              showLastButton
+            />
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseServiciosDialog}>Cerrar</Button>
@@ -1331,7 +1579,9 @@ function Mecanicos() {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {mecanicoDetalle.servicios?.map((servicio) => (
+                        {mecanicoDetalle?.servicios?.filter(servicio => 
+                            ['pendiente', 'diagnostico', 'aprobado', 'en_progreso', 'pausado'].includes(servicio.estado)
+                        ).map((servicio) => (
                           <TableRow key={servicio.id}>
                             <TableCell>
                               {new Date(servicio.fecha_inicio).toLocaleDateString()}

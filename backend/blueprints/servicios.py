@@ -126,6 +126,11 @@ def delete_mecanico(id):
 @jwt_required()
 def get_servicios():
     try:
+        servicios = Servicio.query.all()
+        print("[GET] Listado de servicios:")
+        for s in servicios:
+            print(f"  Servicio {s.id} - Honorarios: {s.honorarios}")
+        
         # Filtros opcionales
         estado = request.args.get('estado')
         cliente_id = request.args.get('cliente_id')
@@ -358,84 +363,75 @@ def update_servicio(id):
     try:
         servicio = Servicio.query.get_or_404(id)
         data = request.get_json()
-        usuario_id = get_jwt_identity()
         
-        # Campos que se pueden actualizar
-        updateable_fields = [
-            'tipo_servicio', 'descripcion', 'prioridad', 'fecha_estimada_fin',
-            'costo_estimado', 'diagnostico', 'recomendaciones', 'notas',
-            'kilometraje_entrada', 'kilometraje_salida',
-            'nivel_combustible_entrada', 'nivel_combustible_salida',
-            'estado', 'honorarios'  # Aseguramos que honorarios está incluido
-        ]
+        print(f"Actualizando servicio {id} con datos:", data)
         
-        # Guardar el estado anterior antes de actualizarlo
-        estado_anterior = servicio.estado
+        # Manejar actualización de honorarios
+        if 'honorarios' in data:
+            try:
+                honorarios = float(data['honorarios'])
+                print(f"Actualizando honorarios de {servicio.honorarios} a {honorarios}")
+                
+                # Actualizar los honorarios
+                servicio.honorarios = honorarios
+                
+                # Verificar que el valor se asignó correctamente
+                if servicio.honorarios != honorarios:
+                    print(f"Error: Los honorarios no se asignaron correctamente. Esperado: {honorarios}, Actual: {servicio.honorarios}")
+                    raise ValueError("Error al asignar los honorarios")
+                
+                # Hacer commit inmediato para los honorarios
+                db.session.commit()
+                
+                # Refrescar el objeto para asegurar que tenemos los datos actualizados
+                db.session.refresh(servicio)
+                
+                # Verificar que los honorarios se guardaron correctamente
+                if servicio.honorarios != honorarios:
+                    print(f"Error: Los honorarios no coinciden después del commit. Esperado: {honorarios}, Actual: {servicio.honorarios}")
+                    db.session.rollback()
+                    return jsonify({"error": "Error al guardar los honorarios"}), 500
+                
+            except (ValueError, TypeError) as e:
+                print(f"Error al convertir honorarios: {e}")
+                db.session.rollback()
+                return jsonify({"error": "Valor de honorarios inválido"}), 400
         
-        for field in updateable_fields:
-            if field in data:
-                if field in ['fecha_estimada_fin'] and data[field]:
-                    setattr(servicio, field, datetime.fromisoformat(data[field].replace('Z', '+00:00')))
-                else:
-                    setattr(servicio, field, data[field])
-        
-        # Si se cambió el estado, registrar en el historial
-        if 'estado' in data and data['estado'] != estado_anterior:
-            print(f"Detectado cambio de estado en update_servicio: {estado_anterior} -> {data['estado']}")
-            
-            # Crear registro en historial de estados
-            historial = HistorialEstado(
-                servicio_id=servicio.id,
-                estado_anterior=estado_anterior,
-                estado_nuevo=data['estado'],
-                comentario=data.get('comentario', f'Estado cambiado a {data["estado"]} desde formulario de edición'),
-                fecha=datetime.utcnow(),
-                usuario_id=usuario_id
-            )
-            db.session.add(historial)
-            
-            # Actualizar fechas según el estado
-            if data['estado'] == 'completado' and not servicio.fecha_fin:
-                servicio.fecha_fin = datetime.utcnow()
-            elif estado_anterior == 'completado' and data['estado'] != 'completado':
-                servicio.fecha_fin = None
-        
-        # Actualizar mecánico si se proporciona
+        # Actualizar otros campos si están presentes
+        if 'tipo_servicio' in data:
+            servicio.tipo_servicio = data['tipo_servicio']
+        if 'descripcion' in data:
+            servicio.descripcion = data['descripcion']
+        if 'estado' in data:
+            servicio.estado = data['estado']
         if 'mecanico_id' in data:
-            if data['mecanico_id']:
-                mecanico = Mecanico.query.get_or_404(data['mecanico_id'])
-                servicio.mecanico_id = mecanico.id
-            else:
-                servicio.mecanico_id = None
+            servicio.mecanico_id = data['mecanico_id']
         
+        # Hacer commit final para todos los cambios
         db.session.commit()
         
-        # Devolver respuesta con datos completos del servicio
+        # Refrescar el objeto una vez más para asegurar que tenemos todos los datos actualizados
+        db.session.refresh(servicio)
+        
+        print(f"Servicio actualizado. Honorarios actuales: {servicio.honorarios}")
+        
         return jsonify({
-            'mensaje': 'Servicio actualizado exitosamente',
-            'servicio': {
+            "mensaje": "Servicio actualizado exitosamente",
+            "servicio": {
                 'id': servicio.id,
                 'tipo_servicio': servicio.tipo_servicio,
-                'estado': servicio.estado,
-                'honorarios': servicio.honorarios,
                 'descripcion': servicio.descripcion,
+                'estado': servicio.estado,
+                'mecanico_id': servicio.mecanico_id,
+                'honorarios': servicio.honorarios,
                 'fecha_inicio': servicio.fecha_inicio.isoformat() if servicio.fecha_inicio else None,
-                'fecha_fin': servicio.fecha_fin.isoformat() if servicio.fecha_fin else None,
-                'fecha_estimada_fin': servicio.fecha_estimada_fin.isoformat() if servicio.fecha_estimada_fin else None,
-                'costo_estimado': servicio.costo_estimado,
-                'costo_real': servicio.costo_real,
-                'mecanico': {
-                    'id': servicio.mecanico.id,
-                    'nombre': f"{servicio.mecanico.nombre} {servicio.mecanico.apellido}",
-                    'especialidad': servicio.mecanico.especialidad
-                } if servicio.mecanico else None
+                'fecha_fin': servicio.fecha_fin.isoformat() if servicio.fecha_fin else None
             }
         }), 200
-        
     except Exception as e:
         db.session.rollback()
-        print(f"Error en update_servicio: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        print(f"Error al actualizar servicio: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @servicios_bp.route('/<int:id>', methods=['DELETE'])
 @jwt_required()

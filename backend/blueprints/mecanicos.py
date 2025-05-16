@@ -174,8 +174,34 @@ def get_servicios_mecanico(id):
     try:
         mecanico = Mecanico.query.get_or_404(id)
         
-        # Obtener todos los servicios del mecánico
-        servicios = Servicio.query.filter(Servicio.mecanico_id == mecanico.id).all()
+        # Obtener parámetros de paginación y filtros
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        estado = request.args.get('estado')
+        search = request.args.get('search', '')
+        
+        # Construir la consulta base
+        query = Servicio.query.filter(Servicio.mecanico_id == mecanico.id)
+        
+        # Aplicar filtros
+        if estado:
+            query = query.filter(Servicio.estado == estado)
+        if search:
+            query = query.filter(
+                db.or_(
+                    Servicio.tipo_servicio.ilike(f'%{search}%'),
+                    Servicio.descripcion.ilike(f'%{search}%')
+                )
+            )
+        
+        # Obtener el total de registros
+        total = query.count()
+        
+        # Aplicar paginación
+        servicios = query.order_by(Servicio.fecha_inicio.desc())\
+            .offset((page - 1) * per_page)\
+            .limit(per_page)\
+            .all()
         
         resultado = []
         for s in servicios:
@@ -186,6 +212,7 @@ def get_servicios_mecanico(id):
                 'estado': s.estado,
                 'fecha_inicio': s.fecha_inicio.isoformat() if s.fecha_inicio else None,
                 'fecha_fin': s.fecha_fin.isoformat() if s.fecha_fin else None,
+                'honorarios': s.honorarios,
                 'vehiculo': {
                     'id': s.vehiculo.id,
                     'placa': s.vehiculo.placa,
@@ -194,7 +221,13 @@ def get_servicios_mecanico(id):
                 } if s.vehiculo else None
             })
         
-        return jsonify({"servicios": resultado}), 200
+        return jsonify({
+            "servicios": resultado,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": (total + per_page - 1) // per_page
+        }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

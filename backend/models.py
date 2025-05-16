@@ -282,7 +282,7 @@ class Servicio(db.Model):
     recomendaciones = db.Column(db.Text)
     costo_estimado = db.Column(db.Float, default=0)
     costo_real = db.Column(db.Float, default=0)
-    honorarios = db.Column(db.Float, default=0)
+    honorarios = db.Column(db.Float, default=0, nullable=False)
     kilometraje_entrada = db.Column(db.Float)
     kilometraje_salida = db.Column(db.Float)
     nivel_combustible_entrada = db.Column(db.Float)
