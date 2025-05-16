@@ -724,6 +724,12 @@ function Servicios() {
       return;
     }
 
+    // Validar transiciones de estado no permitidas
+    if (servicioActual.estado === 'cancelado' && estadoSeleccionado === 'completado') {
+      setError('No se permite cambiar de "cancelado" a "completado". Un servicio cancelado no puede ser completado.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -796,33 +802,8 @@ function Servicios() {
 
   const formatDate = (isoDate) => {
     if (!isoDate) return '';
-    
-    // Verificar si ya es formato YYYY-MM-DD
-    if (/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return isoDate;
-    
-    try {
-      // Cortar la parte de tiempo si existe
-      let dateStr = isoDate;
-      if (isoDate.includes('T')) {
-        dateStr = isoDate.split('T')[0];
-      }
-      
-      // Verificar el formato YYYY-MM-DD
-      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-        return dateStr;
-      }
-      
-      // Si no está en el formato esperado, crear un objeto Date y formatearlo
-      const date = new Date(isoDate);
-      if (isNaN(date.getTime())) {
-        console.error('Fecha inválida:', isoDate);
-        return '';
-      }
-      return date.toISOString().split('T')[0];
-    } catch (e) {
-      console.error('Error al formatear fecha:', e, isoDate);
-      return '';
-    }
+    const date = new Date(isoDate);
+    return date.toISOString().split('T')[0];
   };
 
   const formatEstadoLabel = (estado) => {
@@ -838,6 +819,20 @@ function Servicios() {
     };
     
     return estadosLabels[estado] || estado;
+  };
+
+  const formatDateTime = (isoDate) => {
+    if (!isoDate) return '';
+    const date = new Date(isoDate);
+    return date.toLocaleString('es-ES', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
   };
 
   // Nueva función para manejar la selección de servicio
@@ -1647,7 +1642,7 @@ function Servicios() {
                         <ListItemText
                           primary={
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography variant="subtitle1" fontWeight="bold">
+                              <Typography variant="subtitle1" fontWeight="bold" component="span">
                                 {formatEstadoLabel(item.estado_anterior)} 
                               </Typography>
                               <span>→</span>
@@ -1666,12 +1661,12 @@ function Servicios() {
                             </Box>
                           }
                           secondary={
-                            <>
+                            <Box component="span">
                               <Typography variant="body2" color="text.primary" component="span" display="block">
                                 {item.comentario}
                               </Typography>
-                              <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, color: 'text.secondary' }}>
-                                <Typography variant="caption" display="block" sx={{ fontWeight: 'medium' }}>
+                              <Box component="span" sx={{ display: 'flex', alignItems: 'center', mt: 1, color: 'text.secondary' }}>
+                                <Typography variant="caption" component="span" display="block" sx={{ fontWeight: 'medium' }}>
                                   {item.fecha ? new Date(item.fecha).toLocaleString('es-ES', {
                                     day: '2-digit',
                                     month: '2-digit',
@@ -1682,13 +1677,13 @@ function Servicios() {
                                   }) : 'Fecha no disponible'}
                                 </Typography>
                                 {item.usuario && (
-                                  <Typography variant="caption" display="block" sx={{ ml: 2 }}>
+                                  <Typography variant="caption" component="span" display="block" sx={{ ml: 2 }}>
                                     <PersonIcon fontSize="inherit" sx={{ mr: 0.5, verticalAlign: 'text-bottom' }} />
                                     {item.usuario}
                                   </Typography>
                                 )}
                               </Box>
-                            </>
+                            </Box>
                           }
                         />
                       </ListItem>
@@ -1746,14 +1741,19 @@ function Servicios() {
                       disabled={loading}
                     >
                       <MenuItem value="">Seleccione un nuevo estado</MenuItem>
-                      {Object.entries(estados || {}).map(([key, estado]) => (
-                        // No mostrar el estado actual en las opciones
-                        key !== servicioActual.estado && (
+                      {Object.entries(estados || {}).map(([key, estado]) => {
+                        // No mostrar el estado actual
+                        if (key === servicioActual.estado) return null;
+                        
+                        // No mostrar "completado" si el estado actual es "cancelado"
+                        if (servicioActual.estado === 'cancelado' && key === 'completado') return null;
+                        
+                        return (
                           <MenuItem key={key} value={key}>
                             {estado.nombre || key}
                           </MenuItem>
-                        )
-                      ))}
+                        );
+                      })}
                     </Select>
                   </FormControl>
                 </Grid>
@@ -1889,7 +1889,7 @@ function Servicios() {
                   label="Fecha de Inicio"
                   name="fecha_inicio"
                   type="date"
-                  value={servicioActual.fecha_inicio}
+                  value={servicioActual.fecha_inicio ? formatDate(servicioActual.fecha_inicio) : ''}
                   onChange={handleInputChange}
                   required
                   InputLabelProps={{ shrink: true }}
@@ -1901,7 +1901,7 @@ function Servicios() {
                   label="Fecha de Fin"
                   name="fecha_fin"
                   type="date"
-                  value={servicioActual.fecha_fin}
+                  value={servicioActual.fecha_fin ? formatDate(servicioActual.fecha_fin) : ''}
                   onChange={handleInputChange}
                   InputLabelProps={{ shrink: true }}
                 />

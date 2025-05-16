@@ -487,12 +487,18 @@ function Vehiculos() {
 
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {vehiculoActual.id ? 'Editar Vehículo' : 'Nuevo Vehículo'}
-          {clienteSeleccionado && !vehiculoActual.id && (
-            <Typography variant="subtitle2" color="text.secondary">
-              Cliente: {clienteSeleccionado.nombre}
-            </Typography>
-          )}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box>
+              <Typography variant="h6" component="div">
+                {vehiculoActual.id ? 'Editar Vehículo' : 'Nuevo Vehículo'}
+              </Typography>
+              {clienteSeleccionado && !vehiculoActual.id && (
+                <Typography variant="subtitle2" color="text.secondary">
+                  Cliente: {clienteSeleccionado.nombre}
+                </Typography>
+              )}
+            </Box>
+          </Box>
         </DialogTitle>
         <DialogContent>
           <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
@@ -638,9 +644,11 @@ function Vehiculos() {
       >
         <DialogTitle>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="h6">
-              Servicios del Vehículo {vehiculoSeleccionado?.marca} {vehiculoSeleccionado?.modelo} ({vehiculoSeleccionado?.placa})
-            </Typography>
+            <Box>
+              <Typography variant="h6" component="div">
+                Servicios del Vehículo {vehiculoSeleccionado?.marca} {vehiculoSeleccionado?.modelo} ({vehiculoSeleccionado?.placa})
+              </Typography>
+            </Box>
             <Button
               variant="contained"
               color="primary"
