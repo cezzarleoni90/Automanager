@@ -473,13 +473,14 @@ function Mecanicos() {
             
             if (dialogoMecanicoAbierto) {
                 setDialogoMecanicoAbierto(false);
+                // Reducir el tiempo de espera para una transición más fluida
                 setTimeout(() => {
                     setMecanicoActual({
                         ...mecanicoCompleto,
                         tarifa_hora: mecanicoCompleto.tarifa_hora || 0
                     });
                     setOpenDialog(true);
-                }, 100);
+                }, 50); // Reducido de 100ms a 50ms
             } else {
                 setMecanicoDetalle(mecanicoCompleto);
                 setDialogoMecanicoAbierto(true);
@@ -1463,7 +1464,24 @@ function Mecanicos() {
         open={dialogoMecanicoAbierto} 
         onClose={() => setDialogoMecanicoAbierto(false)}
         maxWidth="md"
-                        fullWidth
+        fullWidth
+        TransitionProps={{
+            timeout: 200, // Reducir el tiempo de transición
+            easing: {
+                enter: 'ease-out',
+                exit: 'ease-in'
+            }
+        }}
+        PaperProps={{
+            sx: {
+                transition: 'all 0.2s ease-in-out',
+                transform: 'scale(1)',
+                opacity: 1,
+                '&.MuiDialog-paper': {
+                    transition: 'all 0.2s ease-in-out'
+                }
+            }
+        }}
       >
         <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', px: 2, py: 1.5 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
