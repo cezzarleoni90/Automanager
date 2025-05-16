@@ -31,6 +31,10 @@ import {
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
+  TablePagination,
+  CircularProgress,
+  Backdrop,
+  FormHelperText,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -47,7 +51,7 @@ import {
 
 function Inventario() {
   const [repuestos, setRepuestos] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [openDialog, setOpenDialog] = useState(false);
@@ -95,9 +99,75 @@ function Inventario() {
   const [dialogoRepuestoAbierto, setDialogoRepuestoAbierto] = useState(false);
   const [repuestoDetalle, setRepuestoDetalle] = useState(null);
 
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [totalRepuestos, setTotalRepuestos] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
+  const [repuestoAEliminar, setRepuestoAEliminar] = useState(null);
+  const [errorEliminacion, setErrorEliminacion] = useState(null);
+
+  const [precioCompraInput, setPrecioCompraInput] = useState('');
+  const [precioVentaInput, setPrecioVentaInput] = useState('');
+
+  const cargarRepuestos = async () => {
+    try {
+      console.log('🔄 Iniciando carga de repuestos...');
+      setIsLoading(true);
+      setLoading(true);
+      
+      const response = await fetch(`http://localhost:5000/api/inventario/repuestos?page=${page + 1}&per_page=${rowsPerPage}&search=${busqueda}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Error al cargar los repuestos');
+      }
+
+      const data = await response.json();
+      console.log('📦 Repuestos recibidos:', data);
+      
+      setRepuestos((data.repuestos || []).map(repuesto => ({
+        ...repuesto,
+        stock: repuesto.stock_actual || repuesto.stock || 0
+      })));
+      setTotalRepuestos(data.total || 0);
+      console.log('✅ Repuestos actualizados en estado');
+    } catch (error) {
+      console.error('❌ Error en cargarRepuestos:', error);
+      setError('Error al cargar repuestos');
+    } finally {
+      setIsLoading(false);
+      setLoading(false);
+    }
+  };
+
+  // Efecto inicial para cargar datos
   useEffect(() => {
     cargarRepuestos();
   }, []);
+
+  // Efecto para recargar cuando cambia la página o el tamaño
+  useEffect(() => {
+    if (page !== undefined && rowsPerPage !== undefined) {
+      cargarRepuestos();
+    }
+  }, [page, rowsPerPage]);
+
+  // Efecto para manejar la búsqueda con debounce
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (busqueda !== undefined) {
+        setPage(0); // Resetear a la primera página
+        cargarRepuestos();
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [busqueda]);
 
   // Función para generar código automáticamente
   const handleGenerarCodigo = async () => {
@@ -186,33 +256,6 @@ function Inventario() {
     setOpenScannerDialog(false);
   };
 
-  const cargarRepuestos = async () => {
-    try {
-      console.log('🔄 Iniciando carga de repuestos...');
-      setLoading(true);
-      const response = await fetch('http://localhost:5000/api/inventario/repuestos', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        }
-      });
-      
-      const data = await response.json();
-      console.log('📦 Repuestos recibidos:', data);
-      
-      // Mapear stock_actual a stock para compatibilidad
-      setRepuestos((data.repuestos || []).map(repuesto => ({
-        ...repuesto,
-        stock: repuesto.stock_actual || repuesto.stock || 0
-      })));
-      console.log('✅ Repuestos actualizados en estado');
-    } catch (error) {
-      console.error('❌ Error en cargarRepuestos:', error);
-      setError('Error al cargar repuestos');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Gestión de categorías
   const handleAgregarCategoria = () => {
     if (nuevaCategoria && !categorias.includes(nuevaCategoria)) {
@@ -238,6 +281,8 @@ function Inventario() {
             ...repuesto,
             stock: repuesto.stock_actual || repuesto.stock || 0
           });
+          setPrecioCompraInput(repuesto.precio_compra?.toString() || '');
+          setPrecioVentaInput(repuesto.precio_venta?.toString() || '');
           setOpenDialog(true);
         }, 100);
       } else {
@@ -258,6 +303,8 @@ function Inventario() {
         categoria: categorias[0] || '',
         ubicacion: '',
       });
+      setPrecioCompraInput('');
+      setPrecioVentaInput('');
       setOpenDialog(true);
     }
   };
@@ -280,12 +327,44 @@ function Inventario() {
     setOpenMovimientoDialog(false);
   };
 
+  // Función para formatear precios
+  const formatearPrecio = (valor) => {
+    if (valor === null || valor === undefined || valor === '') return '';
+    return valor.toLocaleString('es-ES', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setRepuestoActual((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    
+    if (name === 'precio_compra') {
+      setPrecioCompraInput(value);
+      const valorNumerico = value === '' ? 0 : parseFloat(value.replace(',', '.'));
+      setRepuestoActual(prev => ({
+        ...prev,
+        precio_compra: valorNumerico
+      }));
+    } else if (name === 'precio_venta') {
+      setPrecioVentaInput(value);
+      const valorNumerico = value === '' ? 0 : parseFloat(value.replace(',', '.'));
+      setRepuestoActual(prev => ({
+        ...prev,
+        precio_venta: valorNumerico
+      }));
+    } else if (name === 'stock' || name === 'stock_minimo') {
+      const valorNumerico = parseInt(value) || 0;
+      setRepuestoActual(prev => ({
+        ...prev,
+        [name]: valorNumerico
+      }));
+    } else {
+      setRepuestoActual(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
   const handleMovimientoInputChange = (e) => {
@@ -303,6 +382,33 @@ function Inventario() {
     setSuccess('');
 
     try {
+      // Validar campos requeridos
+      const camposRequeridos = {
+        codigo: 'Código',
+        nombre: 'Nombre',
+        categoria: 'Categoría',
+        precio_compra: 'Precio de Compra',
+        precio_venta: 'Precio de Venta'
+      };
+
+      const camposFaltantes = Object.entries(camposRequeridos)
+        .filter(([key]) => !repuestoActual[key])
+        .map(([_, label]) => label);
+
+      if (camposFaltantes.length > 0) {
+        throw new Error(`Los siguientes campos son obligatorios: ${camposFaltantes.join(', ')}`);
+      }
+
+      // Validar que los precios sean números positivos
+      if (repuestoActual.precio_compra <= 0 || repuestoActual.precio_venta <= 0) {
+        throw new Error('Los precios deben ser mayores a 0');
+      }
+
+      // Validar que el stock y stock mínimo sean números no negativos
+      if (repuestoActual.stock < 0 || repuestoActual.stock_minimo < 0) {
+        throw new Error('El stock y stock mínimo no pueden ser negativos');
+      }
+
       const url = repuestoActual.id
         ? `http://localhost:5000/api/inventario/repuestos/${repuestoActual.id}`
         : 'http://localhost:5000/api/inventario/repuestos';
@@ -310,14 +416,17 @@ function Inventario() {
       const method = repuestoActual.id ? 'PUT' : 'POST';
 
       const dataToSend = {
-        codigo: repuestoActual.codigo,
-        nombre: repuestoActual.nombre,
-        categoria: repuestoActual.categoria || 'General',
+        codigo: repuestoActual.codigo.trim(),
+        nombre: repuestoActual.nombre.trim(),
+        categoria: repuestoActual.categoria,
         precio_compra: parseFloat(repuestoActual.precio_compra),
         precio_venta: parseFloat(repuestoActual.precio_venta),
         stock: parseInt(repuestoActual.stock) || 0,
         stock_minimo: parseInt(repuestoActual.stock_minimo) || 0,
-        descripcion: repuestoActual.descripcion || ''
+        descripcion: repuestoActual.descripcion?.trim() || '',
+        marca: repuestoActual.marca?.trim() || '',
+        modelo: repuestoActual.modelo?.trim() || '',
+        ubicacion: repuestoActual.ubicacion?.trim() || ''
       };
 
       const response = await fetch(url, {
@@ -329,9 +438,10 @@ function Inventario() {
         body: JSON.stringify(dataToSend),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Error al guardar el repuesto');
+        throw new Error(data.error || 'Error al guardar el repuesto');
       }
 
       setSuccess(`Repuesto ${repuestoActual.id ? 'actualizado' : 'creado'} exitosamente`);
@@ -380,35 +490,82 @@ function Inventario() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('¿Está seguro de eliminar este repuesto?')) {
-      return;
-    }
+  const handleVerDetalles = (repuesto) => {
+    setRepuestoDetalle(repuesto);
+    setDialogoRepuestoAbierto(true);
+  };
+
+  const handleCloseDetalles = () => {
+    setDialogoRepuestoAbierto(false);
+    setRepuestoDetalle(null);
+  };
+
+  const handleEditarDesdeDetalles = () => {
+    setDialogoRepuestoAbierto(false);
+    setTimeout(() => {
+      setRepuestoActual({
+        ...repuestoDetalle,
+        stock: repuestoDetalle.stock_actual || repuestoDetalle.stock || 0
+      });
+      setOpenDialog(true);
+    }, 100);
+  };
+
+  const handleConfirmarEliminacion = async () => {
+    if (!repuestoAEliminar) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/inventario/repuestos/${id}`, {
+      setLoading(true);
+      const response = await fetch(`http://localhost:5000/api/inventario/repuestos/${repuestoAEliminar.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
+        }
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error('Error al eliminar el repuesto');
+        setErrorEliminacion(data.error);
+        return;
       }
 
       setSuccess('Repuesto eliminado exitosamente');
+      setOpenConfirmDialog(false);
+      setRepuestoAEliminar(null);
+      setErrorEliminacion(null);
       cargarRepuestos();
     } catch (error) {
-      setError(error.message);
+      console.error('Error al eliminar repuesto:', error);
+      setErrorEliminacion(error.message || 'Error al eliminar el repuesto');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const repuestosFiltrados = Array.isArray(repuestos) ? repuestos.filter((repuesto) =>
-    `${repuesto.codigo} ${repuesto.nombre} ${repuesto.marca} ${repuesto.modelo}`
-      .toLowerCase()
-      .includes(busqueda.toLowerCase())
-  ) : [];
+  const handleEliminarDesdeDetalles = () => {
+    setRepuestoAEliminar(repuestoDetalle);
+    setErrorEliminacion(null);
+    setOpenConfirmDialog(true);
+  };
+
+  const handleDelete = (id) => {
+    const repuesto = repuestos.find(r => r.id === id);
+    if (repuesto) {
+      setRepuestoAEliminar(repuesto);
+      setErrorEliminacion(null);
+      setOpenConfirmDialog(true);
+    }
+  };
+
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
@@ -462,56 +619,86 @@ function Inventario() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {repuestosFiltrados.map((repuesto) => (
-              <TableRow key={repuesto.id}>
-                <TableCell>{repuesto.codigo}</TableCell>
-                <TableCell>{repuesto.nombre}</TableCell>
-                <TableCell>
-                  <Chip 
-                    label={repuesto.categoria || 'Sin categoría'} 
-                    size="small"
-                    sx={{ bgcolor: '#e3f2fd', color: '#1976d2' }}
-                  />
-                </TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {repuesto.stock}
-                    {repuesto.stock <= repuesto.stock_minimo && (
-                      <Tooltip title={`Stock bajo (mínimo: ${repuesto.stock_minimo})`}>
-                        <WarningIcon color="warning" fontSize="small" />
-                      </Tooltip>
-                    )}
-                  </Box>
-                </TableCell>
-                <TableCell>${repuesto.precio_venta}</TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Tooltip title="Editar">
-                      <IconButton onClick={() => handleOpenDialog(repuesto)}>
-                        <EditIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Eliminar">
-                      <IconButton onClick={() => handleDelete(repuesto.id)}>
-                        <DeleteIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Registrar Movimiento">
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => handleOpenMovimientoDialog(repuesto)}
-                      >
-                        Movimiento
-                      </Button>
-                    </Tooltip>
-                  </Box>
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                  <CircularProgress />
                 </TableCell>
               </TableRow>
-            ))}
+            ) : repuestos.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                  <Typography color="text.secondary">
+                    No se encontraron repuestos
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : (
+              repuestos.map((repuesto) => (
+                <TableRow key={repuesto.id}>
+                  <TableCell>{repuesto.codigo}</TableCell>
+                  <TableCell>{repuesto.nombre}</TableCell>
+                  <TableCell>
+                    <Chip 
+                      label={repuesto.categoria || 'Sin categoría'} 
+                      size="small"
+                      sx={{ bgcolor: '#e3f2fd', color: '#1976d2' }}
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {repuesto.stock}
+                      {repuesto.stock <= repuesto.stock_minimo && (
+                        <Tooltip title={`Stock bajo (mínimo: ${repuesto.stock_minimo})`}>
+                          <WarningIcon color="warning" fontSize="small" />
+                        </Tooltip>
+                      )}
+                    </Box>
+                  </TableCell>
+                  <TableCell>${formatearPrecio(repuesto.precio_venta)}</TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Tooltip title="Ver detalles">
+                        <IconButton onClick={() => handleOpenDialog(repuesto)}>
+                          <VisibilityIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Registrar Movimiento">
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => handleOpenMovimientoDialog(repuesto)}
+                        >
+                          Movimiento
+                        </Button>
+                      </Tooltip>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
+        <TablePagination
+          component="div"
+          count={totalRepuestos}
+          page={page}
+          onPageChange={handleChangePage}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+          rowsPerPageOptions={[5, 10, 25, 50]}
+          labelRowsPerPage="Filas por página:"
+          labelDisplayedRows={({ from, to, count }) => `${from}-${to} de ${count}`}
+        />
       </TableContainer>
+
+      {/* Backdrop para operaciones de carga */}
+      <Backdrop
+        sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}
+        open={loading}
+      >
+        <CircularProgress color="inherit" />
+      </Backdrop>
 
       {/* Diálogo para crear/editar repuesto */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
@@ -530,6 +717,8 @@ function Inventario() {
                     value={repuestoActual.codigo}
                     onChange={handleInputChange}
                     required
+                    error={!repuestoActual.codigo && error.includes('Código')}
+                    helperText={!repuestoActual.codigo && error.includes('Código') ? 'El código es obligatorio' : ''}
                   />
                   <Tooltip title="Generar código automático">
                     <IconButton 
@@ -557,17 +746,18 @@ function Inventario() {
                   value={repuestoActual.nombre}
                   onChange={handleInputChange}
                   required
+                  error={!repuestoActual.nombre && error.includes('Nombre')}
+                  helperText={!repuestoActual.nombre && error.includes('Nombre') ? 'El nombre es obligatorio' : ''}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth required error={!repuestoActual.categoria && error.includes('Categoría')}>
                   <InputLabel>Categoría</InputLabel>
                   <Select
                     name="categoria"
                     value={repuestoActual.categoria}
                     onChange={handleInputChange}
                     label="Categoría"
-                    required
                   >
                     {categorias.map((categoria) => (
                       <MenuItem key={categoria} value={categoria}>
@@ -575,6 +765,9 @@ function Inventario() {
                       </MenuItem>
                     ))}
                   </Select>
+                  {!repuestoActual.categoria && error.includes('Categoría') && (
+                    <FormHelperText>La categoría es obligatoria</FormHelperText>
+                  )}
                 </FormControl>
               </Grid>
               <Grid item xs={12}>
@@ -633,10 +826,15 @@ function Inventario() {
                   fullWidth
                   label="Precio de Compra"
                   name="precio_compra"
-                  type="number"
-                  value={repuestoActual.precio_compra}
+                  value={precioCompraInput}
                   onChange={handleInputChange}
                   required
+                  error={(!repuestoActual.precio_compra || repuestoActual.precio_compra <= 0) && error.includes('Precio de Compra')}
+                  helperText={(!repuestoActual.precio_compra || repuestoActual.precio_compra <= 0) && error.includes('Precio de Compra') ? 'El precio debe ser mayor a 0' : ''}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                    inputMode: 'decimal'
+                  }}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -644,10 +842,15 @@ function Inventario() {
                   fullWidth
                   label="Precio de Venta"
                   name="precio_venta"
-                  type="number"
-                  value={repuestoActual.precio_venta}
+                  value={precioVentaInput}
                   onChange={handleInputChange}
                   required
+                  error={(!repuestoActual.precio_venta || repuestoActual.precio_venta <= 0) && error.includes('Precio de Venta')}
+                  helperText={(!repuestoActual.precio_venta || repuestoActual.precio_venta <= 0) && error.includes('Precio de Venta') ? 'El precio debe ser mayor a 0' : ''}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                    inputMode: 'decimal'
+                  }}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -664,8 +867,12 @@ function Inventario() {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancelar</Button>
-          <Button onClick={handleSubmit} variant="contained">
-            {repuestoActual.id ? 'Actualizar' : 'Crear'}
+          <Button 
+            onClick={handleSubmit} 
+            variant="contained"
+            disabled={loading}
+          >
+            {loading ? <CircularProgress size={24} /> : (repuestoActual.id ? 'Actualizar' : 'Crear')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -824,6 +1031,260 @@ function Inventario() {
           <Button onClick={handleMovimientoSubmit} variant="contained">
             Registrar
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Diálogo de detalles */}
+      <Dialog 
+        open={dialogoRepuestoAbierto} 
+        onClose={handleCloseDetalles}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white', px: 2, py: 1.5 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">
+              Detalles del Repuesto
+            </Typography>
+            <IconButton 
+              color="inherit" 
+              onClick={handleCloseDetalles}
+              aria-label="cerrar diálogo"
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        
+        <DialogContent dividers sx={{ p: 3 }}>
+          {repuestoDetalle && (
+            <Grid container spacing={3}>
+              {/* Información Básica */}
+              <Grid item xs={12} md={6}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+                    Información Básica
+                  </Typography>
+                  <Box sx={{ mt: 2 }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Código:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{repuestoDetalle.codigo}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Nombre:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{repuestoDetalle.nombre}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Marca:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{repuestoDetalle.marca}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Modelo:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{repuestoDetalle.modelo}</Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Categoría:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">{repuestoDetalle.categoria}</Typography>
+                      </Grid>
+                    </Grid>
+                  </Box>
+                </Paper>
+              </Grid>
+              
+              {/* Información de Stock y Precios */}
+              <Grid item xs={12} md={6}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+                    Stock y Precios
+                  </Typography>
+                  <Box sx={{ mt: 2 }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Stock Actual:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">
+                          {repuestoDetalle.stock_actual || repuestoDetalle.stock || 0} unidades
+                        </Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Stock Mínimo:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">
+                          {repuestoDetalle.stock_minimo || 0} unidades
+                        </Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Precio Compra:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">
+                          ${formatearPrecio(repuestoDetalle.precio_compra)}
+                        </Typography>
+                      </Grid>
+                      
+                      <Grid item xs={4}>
+                        <Typography variant="body2" color="text.secondary">Precio Venta:</Typography>
+                      </Grid>
+                      <Grid item xs={8}>
+                        <Typography variant="body2">
+                          ${formatearPrecio(repuestoDetalle.precio_venta)}
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Box>
+                </Paper>
+              </Grid>
+              
+              {/* Información Adicional */}
+              <Grid item xs={12}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom sx={{ color: 'primary.main' }}>
+                    Información Adicional
+                  </Typography>
+                  <Box sx={{ mt: 2 }}>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12}>
+                        <Typography variant="body2" color="text.secondary">Descripción:</Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          {repuestoDetalle.descripcion || 'Sin descripción'}
+                        </Typography>
+                      </Grid>
+                      
+                      <Grid item xs={12}>
+                        <Typography variant="body2" color="text.secondary">Ubicación:</Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          {repuestoDetalle.ubicacion || 'No especificada'}
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Box>
+                </Paper>
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button 
+            onClick={handleCloseDetalles} 
+            color="inherit"
+          >
+            Cerrar
+          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button 
+              variant="contained" 
+              color="primary"
+              onClick={handleEditarDesdeDetalles}
+              startIcon={<EditIcon />}
+              disabled={loading}
+            >
+              Editar
+            </Button>
+            <Button 
+              variant="contained" 
+              color="error"
+              onClick={handleEliminarDesdeDetalles}
+              startIcon={<DeleteIcon />}
+              disabled={loading}
+            >
+              Eliminar
+            </Button>
+          </Box>
+        </DialogActions>
+      </Dialog>
+
+      {/* Diálogo de confirmación de eliminación */}
+      <Dialog 
+        open={openConfirmDialog} 
+        onClose={() => {
+          setOpenConfirmDialog(false);
+          setRepuestoAEliminar(null);
+          setErrorEliminacion(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <WarningIcon color="warning" />
+            Confirmar Eliminación
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {errorEliminacion ? (
+            <Box sx={{ mt: 2 }}>
+              <Typography color="error" gutterBottom>
+                {errorEliminacion}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                Para eliminar este repuesto, primero debe:
+              </Typography>
+              <List dense>
+                <ListItem>
+                  <ListItemText 
+                    primary="1. Eliminar o cancelar los movimientos asociados"
+                    secondary="Puede ver los movimientos en el historial del repuesto"
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="2. Eliminar las referencias en servicios activos"
+                    secondary="Verifique que el repuesto no esté siendo usado en servicios"
+                  />
+                </ListItem>
+              </List>
+            </Box>
+          ) : (
+            <Box sx={{ mt: 2 }}>
+              <Typography gutterBottom>
+                ¿Está seguro que desea eliminar el repuesto {repuestoAEliminar?.codigo} - {repuestoAEliminar?.nombre}?
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Esta acción no se puede deshacer.
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setOpenConfirmDialog(false);
+              setRepuestoAEliminar(null);
+              setErrorEliminacion(null);
+            }}
+          >
+            Cancelar
+          </Button>
+          {!errorEliminacion && (
+            <Button 
+              onClick={handleConfirmarEliminacion} 
+              color="error" 
+              variant="contained"
+              disabled={loading}
+            >
+              {loading ? <CircularProgress size={24} /> : 'Eliminar'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 
