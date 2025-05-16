@@ -824,14 +824,15 @@ function Servicios() {
   const formatDateTime = (isoDate) => {
     if (!isoDate) return '';
     const date = new Date(isoDate);
-    return date.toLocaleString('es-ES', {
+    return date.toLocaleString('es-CO', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-      hour12: false
+      hour12: false,
+      timeZone: 'America/Bogota'
     });
   };
 

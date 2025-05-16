@@ -32,6 +32,7 @@ import {
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
+  FormHelperText,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -218,6 +219,14 @@ function Vehiculos() {
     setSuccess('');
 
     try {
+      // Validar campos requeridos
+      const camposRequeridos = ['marca', 'modelo', 'año', 'placa', 'cliente_id'];
+      const camposFaltantes = camposRequeridos.filter(campo => !vehiculoActual[campo]);
+      
+      if (camposFaltantes.length > 0) {
+        throw new Error(`Los siguientes campos son obligatorios: ${camposFaltantes.join(', ')}`);
+      }
+
       // Preparar los datos para el backend
       const datosVehiculo = {
         ...vehiculoActual,
@@ -554,7 +563,7 @@ function Vehiculos() {
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required>
+                <FormControl fullWidth required error={!vehiculoActual.cliente_id && error.includes('cliente_id')}>
                   <InputLabel>Cliente</InputLabel>
                   <Select
                     name="cliente_id"
@@ -569,6 +578,9 @@ function Vehiculos() {
                       </MenuItem>
                     ))}
                   </Select>
+                  {!vehiculoActual.cliente_id && error.includes('cliente_id') && (
+                    <FormHelperText>El cliente es obligatorio</FormHelperText>
+                  )}
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>

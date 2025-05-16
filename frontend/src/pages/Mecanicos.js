@@ -35,6 +35,7 @@ import {
   ListItemText,
   Divider,
   Pagination,
+  FormHelperText,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -554,6 +555,26 @@ function Mecanicos() {
     setSuccess('');
 
     try {
+      // Validar campos obligatorios
+      const camposRequeridos = ['nombre', 'apellido', 'email', 'especialidad', 'tarifa_hora'];
+      const camposFaltantes = camposRequeridos.filter(campo => !mecanicoActual[campo]);
+      
+      if (camposFaltantes.length > 0) {
+        throw new Error(`Los siguientes campos son obligatorios: ${camposFaltantes.join(', ')}`);
+      }
+
+      // Validar formato de email
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(mecanicoActual.email)) {
+        throw new Error('El formato del email no es válido');
+      }
+
+      // Convertir tarifa_hora a float
+      const tarifaHora = parseFloat(mecanicoActual.tarifa_hora);
+      if (isNaN(tarifaHora) || tarifaHora < 0) {
+        throw new Error('La tarifa por hora debe ser un número válido mayor o igual a 0');
+      }
+
       const url = mecanicoActual.id
         ? `http://localhost:5000/api/mecanicos/${mecanicoActual.id}`
         : 'http://localhost:5000/api/mecanicos/';
@@ -566,7 +587,10 @@ function Mecanicos() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify(mecanicoActual)
+        body: JSON.stringify({
+          ...mecanicoActual,
+          tarifa_hora: tarifaHora
+        })
       });
 
       if (!response.ok) {
@@ -1076,14 +1100,16 @@ function Mecanicos() {
         <DialogContent>
           <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
             <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <TextField
+              <Grid item xs={12} sm={6}>
+                <TextField
                   fullWidth
-                label="Nombre"
+                  label="Nombre"
                   name="nombre"
                   value={mecanicoActual.nombre}
                   onChange={handleInputChange}
                   required
+                  error={!mecanicoActual.nombre && error.includes('nombre')}
+                  helperText={!mecanicoActual.nombre && error.includes('nombre') ? 'El nombre es obligatorio' : ''}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -1094,46 +1120,53 @@ function Mecanicos() {
                   value={mecanicoActual.apellido}
                   onChange={handleInputChange}
                   required
+                  error={!mecanicoActual.apellido && error.includes('apellido')}
+                  helperText={!mecanicoActual.apellido && error.includes('apellido') ? 'El apellido es obligatorio' : ''}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
-                fullWidth
+                  fullWidth
                   label="Email"
                   name="email"
                   type="email"
                   value={mecanicoActual.email}
                   onChange={handleInputChange}
                   required
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
+                  error={!mecanicoActual.email && error.includes('email')}
+                  helperText={!mecanicoActual.email && error.includes('email') ? 'El email es obligatorio' : ''}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
                   label="Teléfono"
                   name="telefono"
                   value={mecanicoActual.telefono}
                   onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required>
-                <InputLabel>Especialidad</InputLabel>
-                <Select
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth required error={!mecanicoActual.especialidad && error.includes('especialidad')}>
+                  <InputLabel>Especialidad</InputLabel>
+                  <Select
                     name="especialidad"
                     value={mecanicoActual.especialidad}
                     onChange={handleInputChange}
                     label="Especialidad"
-                >
-                  {especialidades.map((especialidad) => (
-                    <MenuItem key={especialidad} value={especialidad}>
-                      {especialidad}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
+                  >
+                    {especialidades.map((especialidad) => (
+                      <MenuItem key={especialidad} value={especialidad}>
+                        {especialidad}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {!mecanicoActual.especialidad && error.includes('especialidad') && (
+                    <FormHelperText>La especialidad es obligatoria</FormHelperText>
+                  )}
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   label="Tarifa por Hora"
@@ -1143,29 +1176,31 @@ function Mecanicos() {
                   value={mecanicoActual.tarifa_hora}
                   onChange={handleInputChange}
                   required
+                  error={!mecanicoActual.tarifa_hora && error.includes('tarifa_hora')}
+                  helperText={!mecanicoActual.tarifa_hora && error.includes('tarifa_hora') ? 'La tarifa por hora es obligatoria' : ''}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth required>
-                <InputLabel>Estado</InputLabel>
-                <Select
+                  <InputLabel>Estado</InputLabel>
+                  <Select
                     name="estado"
                     value={mecanicoActual.estado}
                     onChange={handleInputChange}
                     label="Estado"
-                >
-                  <MenuItem value="activo">Activo</MenuItem>
-                  <MenuItem value="inactivo">Inactivo</MenuItem>
-                </Select>
-              </FormControl>
+                  >
+                    <MenuItem value="activo">Activo</MenuItem>
+                    <MenuItem value="inactivo">Inactivo</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
             </Grid>
-          </Grid>
           </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancelar</Button>
-          <Button onClick={handleSubmit} variant="contained">
-            {mecanicoActual.id ? 'Actualizar' : 'Crear'}
+          <Button onClick={handleSubmit} variant="contained" disabled={loading}>
+            {loading ? 'Guardando...' : (mecanicoActual.id ? 'Actualizar' : 'Crear')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -1097,12 +1097,15 @@ def obtener_historial(id):
                 if usuario:
                     usuario_nombre = f"{usuario.nombre} {usuario.apellido}" if usuario.apellido else usuario.nombre
             
+            # Ajustar la fecha a la zona horaria de Bogotá (UTC-5)
+            fecha_bogota = h.fecha - timedelta(hours=5)
+            
             historial_formateado.append({
                 'id': h.id,
                 'estado_anterior': h.estado_anterior,
                 'estado_nuevo': h.estado_nuevo,
                 'comentario': h.comentario,
-                'fecha': h.fecha.isoformat(),
+                'fecha': fecha_bogota.isoformat(),
                 'usuario': usuario_nombre,
                 'usuario_id': h.usuario_id
             })
