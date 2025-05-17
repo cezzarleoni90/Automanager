@@ -1,6 +1,10 @@
 from celery import Celery
-from utils.logger import log_activity
-from utils.cache import invalidate_cache
+from backend.utils.logger import log_activity
+from backend.utils.cache import invalidate_cache
+from backend.models import Repuesto
+from backend.services.sync_service import SyncService
+from backend.services.report_service import ReportService
+from backend.services.notification_service import NotificationService
 import os
 
 # Configurar Celery
@@ -25,7 +29,6 @@ celery.conf.update(
 def sync_inventory(proveedor_id=None):
     """Tarea asíncrona para sincronizar inventario"""
     try:
-        from services.sync_service import SyncService
         sync_service = SyncService()
         if proveedor_id:
             return sync_service.sync_proveedor(proveedor_id)
@@ -38,7 +41,6 @@ def sync_inventory(proveedor_id=None):
 def generate_report(report_type, params):
     """Tarea asíncrona para generar reportes"""
     try:
-        from services.report_service import ReportService
         report_service = ReportService()
         return report_service.generate_report(report_type, params)
     except Exception as e:
@@ -49,15 +51,10 @@ def generate_report(report_type, params):
 def cleanup_old_data():
     """Tarea asíncrona para limpieza de datos antiguos"""
     try:
-        from services.notification_service import NotificationService
-        from datetime import datetime, timedelta
-        
-        # Limpiar notificaciones antiguas
         notification_service = NotificationService()
         retention_days = int(os.getenv('NOTIFICATION_RETENTION_DAYS', 30))
         notification_service.delete_old_notifications(retention_days)
         
-        # Invalidar caché antiguo
         invalidate_cache('reports')
         
         log_activity('cleanup', 'Limpieza de datos completada')
@@ -69,9 +66,6 @@ def cleanup_old_data():
 def check_stock_alerts():
     """Tarea asíncrona para verificar alertas de stock"""
     try:
-        from models import Repuesto
-        from services.notification_service import NotificationService
-        
         notification_service = NotificationService()
         repuestos_bajo_stock = Repuesto.query.filter(
             Repuesto.stock_actual <= Repuesto.stock_minimo

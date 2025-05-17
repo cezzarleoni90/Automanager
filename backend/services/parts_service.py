@@ -1,6 +1,6 @@
-from models import db, Repuesto
-from utils.logger import log_activity
-from utils.cache import cache_with_args, invalidate_cache_pattern
+from backend.models import db, Repuesto
+from backend.utils.logger import log_activity
+from backend.utils.cache import cache_with_args, invalidate_cache_pattern
 from typing import List, Dict, Optional
 from sqlalchemy import or_
 

@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
-from extensions import db
-from models import Vehiculo, Servicio, HistorialMantenimiento, Cliente, Notificacion
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from backend.models import Vehiculo, Servicio, HistorialMantenimiento, Cliente, Notificacion
+from backend.extensions import db
 from datetime import datetime, timezone, timedelta
 
 mantenimiento_bp = Blueprint('mantenimiento', __name__)

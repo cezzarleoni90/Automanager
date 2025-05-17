@@ -1,13 +1,15 @@
-from models import db, Repuesto, Proveedor, MovimientoInventario
+from backend.models import db, Repuesto, Proveedor, MovimientoInventario
 from datetime import datetime, timedelta
-from sqlalchemy.exc import SQLAlchemyError
-from utils.logger import log_activity, measure_time, metrics
-import requests
-from typing import Dict, List, Optional, Any
+from sqlalchemy import and_
+from backend.utils.logger import log_activity, measure_time, metrics
+from backend.utils.cache import cache_decorator
+from typing import Dict, List, Any, Optional
 import json
 import os
-from config import Config
-from utils.cache import cache_decorator
+import threading
+import time
+import requests
+from backend.config import Config
 
 class SyncService:
     """Servicio para manejar la sincronización de datos"""

@@ -1,6 +1,6 @@
 from flask import request, g, current_app, jsonify
-from utils.logger import log_activity
-from utils.security import SecurityManager
+from backend.utils.logger import log_activity
+from backend.utils.security import SecurityManager
 import time
 from functools import wraps
 from typing import Callable, Any, Dict, List, Optional

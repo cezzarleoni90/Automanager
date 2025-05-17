@@ -1,7 +1,10 @@
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
-from extensions import db
-from models import Cliente, Vehiculo, Servicio, Notificacion
+from backend.extensions import db
+from backend.models import Cliente, Vehiculo, Servicio, Notificacion
+from backend.utils.logger import log_activity
+from backend.utils.security import require_roles
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from typing import Dict, Any
 from datetime import datetime, timezone
 
 chatbot_bp = Blueprint('chatbot', __name__)

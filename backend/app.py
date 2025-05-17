@@ -1,34 +1,41 @@
-from flask import Flask, jsonify
-from flask_jwt_extended import JWTManager
-from extensions import db
-from middleware import setup_cors, handle_preflight
-from flask_cors import CORS
-from flask_migrate import Migrate
-import logging
-from datetime import timedelta
 import os
+import sys
+
+# Agregar el directorio raíz al path de Python
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from backend.extensions import db
+from backend.config import Config
+from flask import Flask
+from flask_cors import CORS
+from flask_jwt_extended import JWTManager
+from flask_migrate import Migrate
+from flask_sqlalchemy import SQLAlchemy
+from backend.middleware import setup_cors, handle_preflight
+from datetime import timedelta
+import logging
 from dotenv import load_dotenv
-from blueprints.auth import auth_bp
-from blueprints.clientes import bp as clientes_bp
-from blueprints.vehiculos import bp as vehiculos_bp
-from blueprints.servicios import servicios_bp
-from blueprints.mecanicos import mecanicos_bp
-from blueprints.usuarios import usuarios_bp
-from blueprints.configuracion import configuracion_bp
-from blueprints.dashboard import bp as dashboard_bp
-from blueprints.inventario import inventario_bp
-from blueprints.metrics import metrics_bp
-from blueprints.sync import sync_bp
-from blueprints.notifications import notifications_bp
-from blueprints.reports import reports_bp
-from api_docs import api_bp
-from utils.logger import StructuredLogger, log_request, metrics, init_logger
-from utils.error_monitor import init_error_monitoring
-from utils.cache import cache
-from blueprints.restore import restore_bp
+from backend.blueprints.auth import auth_bp
+from backend.blueprints.clientes import bp as clientes_bp
+from backend.blueprints.vehiculos import bp as vehiculos_bp
+from backend.blueprints.servicios import servicios_bp
+from backend.blueprints.mecanicos import mecanicos_bp
+from backend.blueprints.usuarios import usuarios_bp
+from backend.blueprints.configuracion import configuracion_bp
+from backend.blueprints.dashboard import bp as dashboard_bp
+from backend.blueprints.inventario import inventario_bp
+from backend.blueprints.metrics import metrics_bp
+from backend.blueprints.sync import sync_bp
+from backend.blueprints.notifications import notifications_bp
+from backend.blueprints.reports import reports_bp
+from backend.api_docs import api_bp
+from backend.utils.logger import StructuredLogger, log_request, metrics, init_logger
+from backend.utils.error_monitor import init_error_monitoring
+from backend.utils.cache import cache
+from backend.blueprints.restore import restore_bp
 from flask_swagger_ui import get_swaggerui_blueprint
-from middleware.security import SecurityMiddleware
-from middleware.query_monitor import QueryMonitor
+from backend.middleware.security import SecurityMiddleware
+from backend.middleware.query_monitor import QueryMonitor
 
 # Cargar variables de entorno
 load_dotenv()

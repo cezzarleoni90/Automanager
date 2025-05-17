@@ -1,8 +1,8 @@
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import joinedload, selectinload, subqueryload
-from models import db
-from utils.logger import log_activity
-from utils.cache import cache_with_args
+from backend.models import db
+from backend.utils.logger import log_activity
+from backend.utils.cache import cache_with_args
 from typing import List, Dict, Any, Optional
 import time
 from sqlalchemy.engine import Engine

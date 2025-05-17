@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
-from services.notification_service import NotificationService
-from utils.logger import log_activity
+from backend.services.notification_service import NotificationService
+from backend.utils.logger import log_activity
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 

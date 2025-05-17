@@ -1,8 +1,10 @@
 from flask import Blueprint, jsonify, request
+from backend.utils.logger import log_activity
+from backend.utils.security import require_roles
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from tasks.restore import restore_database, list_available_backups
-from utils.logger import log_activity
+from backend.tasks.restore import restore_database, list_available_backups
 from datetime import datetime
+from typing import Dict, Any
 
 restore_bp = Blueprint('restore', __name__)
 

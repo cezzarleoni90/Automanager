@@ -1,13 +1,15 @@
-from tasks import celery
-from models import db, Repuesto, MovimientoInventario, Proveedor
-from utils.logger import log_activity
+from celery import shared_task
+from backend.utils.logger import log_activity
+from backend.models import Servicio, Factura, Repuesto, MovimientoInventario, Proveedor
+from backend.extensions import db
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, Any, List, Optional
+from backend.utils.cache import cache_with_args
 import pandas as pd
 import os
-from utils.cache import cache_with_args
+import io
 
-@celery.task(name='tasks.generate_inventory_report')
+@shared_task(name='tasks.generate_inventory_report')
 def generate_inventory_report(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
@@ -65,7 +67,7 @@ def generate_inventory_report(
         log_activity('report_error', f"Error generando reporte: {str(e)}")
         raise
 
-@celery.task(name='tasks.generate_supplier_report')
+@shared_task(name='tasks.generate_supplier_report')
 def generate_supplier_report(supplier_id: Optional[int] = None) -> Dict:
     """Genera reporte de proveedores"""
     try:
@@ -113,7 +115,7 @@ def generate_supplier_report(supplier_id: Optional[int] = None) -> Dict:
         log_activity('report_error', f"Error generando reporte: {str(e)}")
         raise
 
-@celery.task(name='tasks.generate_stock_alerts_report')
+@shared_task(name='tasks.generate_stock_alerts_report')
 def generate_stock_alerts_report() -> Dict:
     """Genera reporte de alertas de stock"""
     try:

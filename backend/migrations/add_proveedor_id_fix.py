@@ -1,5 +1,5 @@
 from backend.app import create_app
-from backend.models import db
+from backend.extensions import db
 from sqlalchemy import text, inspect
 
 app = create_app()
@@ -14,6 +14,20 @@ def migrate():
             if 'proveedor_id' not in columns:
                 # Agregar columna proveedor_id a la tabla repuesto
                 with db.engine.connect() as conn:
+                    # Primero, crear la tabla proveedor si no existe
+                    conn.execute(text("""
+                        CREATE TABLE IF NOT EXISTS proveedor (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            nombre TEXT NOT NULL,
+                            email TEXT UNIQUE,
+                            telefono TEXT,
+                            direccion TEXT,
+                            fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """))
+                    
+                    # Luego, agregar la columna proveedor_id
                     conn.execute(text("""
                         ALTER TABLE repuesto 
                         ADD COLUMN proveedor_id INTEGER 

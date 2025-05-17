@@ -1,16 +1,17 @@
-from tasks import celery
-from models import db, Repuesto, MovimientoInventario
-from utils.logger import log_activity
+from celery import shared_task
+from backend.extensions import db
+from backend.models import Repuesto, MovimientoInventario, Proveedor
+from backend.utils.logger import log_activity
+from backend.services.sync_service import SyncService
+from backend.services.notification_service import NotificationService
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict
+from typing import Dict, Any, List, Optional
 import json
 
-@celery.task(name='tasks.sync_inventory', bind=True, max_retries=3)
+@shared_task(name='tasks.sync_inventory', bind=True, max_retries=3)
 def sync_inventory(self, supplier_id: Optional[int] = None) -> Dict:
     """Sincroniza el inventario con los proveedores"""
     try:
-        from services.sync_service import SyncService
-        
         sync_service = SyncService()
         result = sync_service.sync_with_supplier(supplier_id) if supplier_id else sync_service.sync_all()
         
@@ -29,7 +30,7 @@ def sync_inventory(self, supplier_id: Optional[int] = None) -> Dict:
         log_activity('inventory_sync_error', f"Error en sincronización: {str(e)}")
         self.retry(exc=e, countdown=300)  # Reintentar en 5 minutos
 
-@celery.task(name='tasks.check_stock_alerts')
+@shared_task(name='tasks.check_stock_alerts')
 def check_stock_alerts() -> Dict:
     """Verifica alertas de stock bajo"""
     try:
@@ -46,7 +47,6 @@ def check_stock_alerts() -> Dict:
             }
         
         # Crear notificaciones
-        from services.notification_service import NotificationService
         notification_service = NotificationService()
         
         alerts = []
@@ -82,7 +82,7 @@ def check_stock_alerts() -> Dict:
         log_activity('stock_alerts_error', f"Error verificando alertas: {str(e)}")
         raise
 
-@celery.task(name='tasks.cleanup_old_data')
+@shared_task(name='tasks.cleanup_old_data')
 def cleanup_old_data() -> Dict:
     """Limpia datos antiguos del sistema"""
     try:
@@ -96,7 +96,7 @@ def cleanup_old_data() -> Dict:
         ).delete()
         
         # Limpiar notificaciones antiguas
-        from models import Notificacion
+        from backend.models import Notificacion
         old_notifications = Notificacion.query.filter(
             Notificacion.fecha < old_date
         ).delete()

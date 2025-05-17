@@ -1,10 +1,12 @@
-from models import db, Usuario, Repuesto, MovimientoInventario, Proveedor
+from backend.models import Usuario, Repuesto, MovimientoInventario, Proveedor
+from backend.extensions import db
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
-from sqlalchemy import func, and_, desc
-from utils.logger import log_activity, metrics, measure_time
+from sqlalchemy import func, and_, desc, case
+from backend.utils.logger import log_activity, metrics, measure_time
 import psutil
 import json
+from io import BytesIO
 
 class MetricsService:
     @measure_time('get_system_metrics')

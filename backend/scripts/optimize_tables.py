@@ -1,7 +1,9 @@
-from app import create_app
-from models import db, Repuesto, MovimientoInventario, Proveedor, Cliente, Vehiculo, Servicio
-from utils.query_optimizer import QueryOptimizer
-from utils.logger import log_activity
+from backend.app import create_app
+from backend.utils.query_optimizer import QueryOptimizer
+from backend.utils.logger import log_activity
+from backend.extensions import db
+from typing import Dict, Any
+from models import Repuesto, MovimientoInventario, Proveedor, Cliente, Vehiculo, Servicio
 
 def optimize_tables():
     """Aplica optimizaciones a las tablas de la base de datos"""

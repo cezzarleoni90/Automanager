@@ -1,12 +1,14 @@
+from celery import shared_task
+from backend.extensions import db
+from backend.utils.logger import log_activity
+from datetime import datetime, timedelta
+from typing import Dict, Any, Optional
 import os
 import subprocess
-from datetime import datetime
-from utils.logger import log_activity
-from tasks import celery
 import boto3
 from botocore.exceptions import ClientError
 
-@celery.task(name='tasks.backup_database')
+@shared_task(name='tasks.backup_database')
 def backup_database():
     """Tarea asíncrona para backup de la base de datos"""
     try:
@@ -56,7 +58,7 @@ def backup_database():
         log_activity('backup_error', f"Error en backup: {str(e)}")
         raise
 
-@celery.task(name='tasks.cleanup_old_backups')
+@shared_task(name='tasks.cleanup_old_backups')
 def cleanup_old_backups():
     """Tarea asíncrona para limpiar backups antiguos"""
     try:

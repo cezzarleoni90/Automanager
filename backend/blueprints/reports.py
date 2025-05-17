@@ -1,7 +1,9 @@
 from flask import Blueprint, jsonify, request, send_file
-from services.report_service import ReportService
-from utils.logger import log_activity
+from backend.services.report_service import ReportService
+from backend.utils.logger import log_activity
+from backend.utils.security import require_roles, block_sql_injection, prevent_xss
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from typing import Dict, Any
 from datetime import datetime
 from io import BytesIO
 

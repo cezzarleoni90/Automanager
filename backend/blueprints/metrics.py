@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
-from services.metrics_service import MetricsService
-from utils.logger import log_activity
+from backend.services.metrics_service import MetricsService
+from backend.utils.logger import log_activity
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 from functools import wraps

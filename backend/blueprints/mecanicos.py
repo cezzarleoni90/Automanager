@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from extensions import db
-from models import Mecanico, Servicio, HoraTrabajo
+from backend.models import Mecanico, Servicio, HoraTrabajo
+from backend.extensions import db
 from datetime import datetime, timedelta
 from sqlalchemy import func
 

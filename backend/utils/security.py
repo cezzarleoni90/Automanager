@@ -1,6 +1,6 @@
 from flask import request, current_app, jsonify
 from functools import wraps
-from utils.logger import log_activity
+from backend.utils.logger import log_activity
 import re
 import hashlib
 import secrets

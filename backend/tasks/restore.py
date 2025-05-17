@@ -1,15 +1,16 @@
+from celery import shared_task
+from backend.extensions import db
+from backend.utils.logger import log_activity
+from datetime import datetime
+from typing import Dict, Any, Optional, List
 import os
 import subprocess
-from datetime import datetime
-from utils.logger import log_activity
-from tasks import celery
 import boto3
 from botocore.exceptions import ClientError
 import json
 import hashlib
-from typing import Optional, Dict, List
 
-@celery.task(name='tasks.restore_database')
+@shared_task(name='tasks.restore_database')
 def restore_database(
     backup_file: Optional[str] = None,
     from_s3: bool = False,
@@ -167,7 +168,7 @@ def restore_sqlite(db_url: str, backup_path: str, tables: Optional[List[str]] = 
     else:
         subprocess.run(['sqlite3', db_path, f'.restore {backup_path}'], check=True)
 
-@celery.task(name='tasks.list_available_backups')
+@shared_task(name='tasks.list_available_backups')
 def list_available_backups(from_s3: bool = False) -> Dict:
     """Lista los backups disponibles"""
     try:

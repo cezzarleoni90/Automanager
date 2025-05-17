@@ -1,6 +1,6 @@
 from flask import request, g, current_app, has_request_context
-from utils.logger import log_activity
-from utils.query_optimizer import QueryOptimizer
+from backend.utils.logger import log_activity
+from backend.utils.query_optimizer import QueryOptimizer
 import time
 from functools import wraps
 from typing import Callable, Any, Dict, List, Optional

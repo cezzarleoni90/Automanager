@@ -1,10 +1,11 @@
-from models import db, Repuesto, MovimientoInventario, Proveedor
+from backend.models import db, Repuesto, MovimientoInventario, Proveedor
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
-from sqlalchemy import func, and_, desc
-from utils.logger import log_activity, metrics, measure_time
+from sqlalchemy import func, and_, desc, case
+from backend.utils.logger import log_activity, metrics, measure_time
 import pandas as pd
 import json
+from io import BytesIO
 
 class ReportService:
     @measure_time('report_inventory_value')

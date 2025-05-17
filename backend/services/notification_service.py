@@ -1,8 +1,8 @@
-from models import db, Notificacion, Usuario
+from backend.models import db, Notificacion, Usuario
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from sqlalchemy import and_, or_
-from utils.logger import log_activity, metrics, measure_time
+from backend.utils.logger import log_activity, metrics, measure_time
 import json
 
 class NotificationService:

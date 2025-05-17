@@ -1,9 +1,10 @@
 from flask import Blueprint, jsonify, request
-from services.sync_service import SyncService
-from utils.logger import log_activity
-from utils.security import require_roles, block_sql_injection, prevent_xss
-from utils.cache import cache_decorator
+from backend.services.sync_service import SyncService
+from backend.utils.logger import log_activity
+from backend.utils.security import require_roles, block_sql_injection, prevent_xss
+from backend.utils.cache import cache_decorator
 from typing import Dict, Any
+from flask_jwt_extended import jwt_required, get_jwt_identity
 
 sync_bp = Blueprint('sync', __name__)
 sync_service = SyncService()

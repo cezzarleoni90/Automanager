@@ -1,8 +1,11 @@
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
-from extensions import db
-from models import Evento, Servicio, Mecanico, Vehiculo, Cliente
+from backend.extensions import db
+from backend.models import Evento, Servicio, Mecanico, Vehiculo, Cliente
+from backend.utils.logger import log_activity
+from backend.utils.security import require_roles
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime, timezone, timedelta
+from typing import Dict, Any
 
 calendario_bp = Blueprint('calendario', __name__)
 
