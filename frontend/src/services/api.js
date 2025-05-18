@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5000/api';
+export const API_URL = 'http://localhost:5000/api';
 
 // Configurar el interceptor para incluir el token en cada petición
 axios.interceptors.request.use(

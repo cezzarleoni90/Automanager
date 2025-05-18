@@ -70,6 +70,8 @@ import {
   getMecanicos,
   getRepuestos,
 } from '../services/api';
+import '../index.css'; // O la ruta correcta a tu CSS global
+import esLocale from '@fullcalendar/core/locales/es';
 
 function Servicios() {
   const navigate = useNavigate();

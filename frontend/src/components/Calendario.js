@@ -7,6 +7,7 @@ import esLocale from '@fullcalendar/core/locales/es';
 import { Modal, Button, Form } from 'react-bootstrap';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
+import { API_URL } from '../services/api';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '../styles/Calendario.css';
 
@@ -36,10 +37,11 @@ const Calendario = () => {
 
     const cargarEventos = async () => {
         try {
-            const response = await axios.get('/api/eventos', {
+            const response = await axios.get(`${API_URL}/eventos`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            const eventosFormateados = response.data.map(evento => ({
+            const eventosData = Array.isArray(response.data) ? response.data : [];
+            const eventosFormateados = eventosData.map(evento => ({
                 id: evento.id,
                 title: evento.titulo,
                 start: evento.fecha_inicio,
@@ -57,28 +59,31 @@ const Calendario = () => {
             setEventos(eventosFormateados);
         } catch (error) {
             console.error('Error al cargar eventos:', error);
+            setEventos([]);
         }
     };
 
     const cargarMecanicos = async () => {
         try {
-            const response = await axios.get('/api/mecanicos', {
+            const response = await axios.get(`${API_URL}/mecanicos`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setMecanicos(response.data);
+            setMecanicos(Array.isArray(response.data) ? response.data : []);
         } catch (error) {
             console.error('Error al cargar mecánicos:', error);
+            setMecanicos([]);
         }
     };
 
     const cargarServicios = async () => {
         try {
-            const response = await axios.get('/api/servicios', {
+            const response = await axios.get(`${API_URL}/servicios`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setServicios(response.data);
+            setServicios(Array.isArray(response.data) ? response.data : []);
         } catch (error) {
             console.error('Error al cargar servicios:', error);
+            setServicios([]);
         }
     };
 
@@ -115,11 +120,11 @@ const Calendario = () => {
         e.preventDefault();
         try {
             if (selectedEvent) {
-                await axios.put(`/api/eventos/${selectedEvent.id}`, formData, {
+                await axios.put(`${API_URL}/eventos/${selectedEvent.id}`, formData, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
             } else {
-                await axios.post('/api/eventos', formData, {
+                await axios.post(`${API_URL}/eventos`, formData, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
             }
@@ -133,7 +138,7 @@ const Calendario = () => {
     const handleDelete = async () => {
         if (window.confirm('¿Estás seguro de que deseas eliminar este evento?')) {
             try {
-                await axios.delete(`/api/eventos/${selectedEvent.id}`, {
+                await axios.delete(`${API_URL}/eventos/${selectedEvent.id}`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 setShowModal(false);
@@ -149,7 +154,7 @@ const Calendario = () => {
             <div className="card">
                 <div className="card-body">
                     <div className="mecanicos-leyenda">
-                        {mecanicos.map(mecanico => (
+                        {Array.isArray(mecanicos) && mecanicos.map(mecanico => (
                             <div key={mecanico.id} className="mecanico-item">
                                 <div 
                                     className="mecanico-color" 
@@ -252,7 +257,7 @@ const Calendario = () => {
                                 onChange={(e) => setFormData({...formData, servicio_id: e.target.value})}
                             >
                                 <option value="">Seleccionar servicio</option>
-                                {servicios.map(servicio => (
+                                {Array.isArray(servicios) && servicios.map(servicio => (
                                     <option key={servicio.id} value={servicio.id}>
                                         {servicio.descripcion}
                                     </option>
