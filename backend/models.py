@@ -241,6 +241,7 @@ class Mecanico(db.Model):
     tarifa_hora = db.Column(db.Float, default=0.0)
     fecha_contratacion = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     estado = db.Column(db.String(20), default='activo')
+    color = db.Column(db.String(7), default='#B0E0E6')
     
     # Relaciones
     servicios = db.relationship('Servicio', back_populates='mecanico', lazy=True)
@@ -270,17 +271,18 @@ class Servicio(db.Model):
     }
     
     id = db.Column(db.Integer, primary_key=True)
-    tipo_servicio = db.Column(db.String(50), nullable=False)
-    descripcion = db.Column(db.Text, nullable=False)
-    fecha_inicio = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    titulo = db.Column(db.String(200), nullable=False)
+    descripcion = db.Column(db.Text)
+    tipo_servicio = db.Column(db.String(50), nullable=False, default='Mantenimiento')
+    fecha_inicio = db.Column(db.DateTime)
     fecha_fin = db.Column(db.DateTime)
     fecha_estimada_fin = db.Column(db.DateTime)
-    estado = db.Column(db.String(20), nullable=False, default='pendiente')
+    estado = db.Column(db.String(20), default='pendiente')
     prioridad = db.Column(db.String(10), default='normal')
     notas = db.Column(db.Text)
     diagnostico = db.Column(db.Text)
     recomendaciones = db.Column(db.Text)
-    costo_estimado = db.Column(db.Float, default=0)
+    costo = db.Column(db.Float, default=0)
     costo_real = db.Column(db.Float, default=0)
     honorarios = db.Column(db.Float, default=0, nullable=False)
     kilometraje_entrada = db.Column(db.Float)

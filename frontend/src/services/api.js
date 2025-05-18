@@ -464,3 +464,32 @@ export const deleteVehiculo = async (id) => {
     return handleApiError(error, `deleteVehiculo(${id})`);
   }
 };
+
+// Crear vehículo para un cliente específico
+export const createVehiculoCliente = async (clienteId, data) => {
+  try {
+    console.log('API: Creando nuevo vehículo para cliente', clienteId, data);
+    
+    // Limpiar datos antes de enviar
+    const vehiculoData = {
+      marca: data.marca || '',
+      modelo: data.modelo || '',
+      año: data.año ? parseInt(data.año) : null,
+      placa: data.placa || '',
+      color: data.color || null,
+      kilometraje: data.kilometraje ? parseFloat(data.kilometraje) : null,
+      tipo_combustible: data.tipo_combustible || null,
+      transmision: data.transmision || null,
+      vin: data.vin || null,
+      ultimo_servicio: data.ultimo_servicio || null
+    };
+
+    const response = await axios.post(`${API_URL}/clientes/${clienteId}/vehiculos`, vehiculoData, {
+      timeout: 8000
+    });
+    console.log('API: Vehículo creado:', response.status);
+    return response.data;
+  } catch (error) {
+    return handleApiError(error, 'createVehiculoCliente');
+  }
+};

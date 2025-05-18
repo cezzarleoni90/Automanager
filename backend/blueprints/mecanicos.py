@@ -4,6 +4,7 @@ from extensions import db
 from models import Mecanico, Servicio, HoraTrabajo
 from datetime import datetime, timedelta
 from sqlalchemy import func
+from utils.colors import obtener_color_pastel_disponible, obtener_categoria_color
 
 mecanicos_bp = Blueprint('mecanicos', __name__)
 
@@ -12,30 +13,20 @@ mecanicos_bp = Blueprint('mecanicos', __name__)
 def get_mecanicos():
     try:
         mecanicos = Mecanico.query.all()
-        
-        # Contar servicios activos para cada mecánico
-        result = []
-        for mecanico in mecanicos:
-            servicios_activos = Servicio.query.filter(
-                Servicio.mecanico_id == mecanico.id,
-                Servicio.estado.in_(['pendiente', 'diagnostico', 'en_progreso', 'pausado'])
-            ).count()
-            
-            result.append({
-                'id': mecanico.id,
-                'nombre': mecanico.nombre,
-                'apellido': mecanico.apellido,
-                'especialidad': mecanico.especialidad,
-                'telefono': mecanico.telefono,
-                'email': mecanico.email,
-                'estado': mecanico.estado,
-                'tarifa_hora': mecanico.tarifa_hora,
-                'servicios_activos': servicios_activos
-            })
-        
-        return jsonify({"mecanicos": result}), 200
+        return jsonify({
+            'mecanicos': [{
+                'id': m.id,
+                'nombre': m.nombre,
+                'apellido': m.apellido,
+                'especialidad': m.especialidad,
+                'color': m.color,
+                'estado': m.estado,
+                'telefono': m.telefono,
+                'email': m.email
+            } for m in mecanicos]
+        }), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({'error': str(e)}), 500
 
 @mecanicos_bp.route('/<int:id>', methods=['GET'])
 @jwt_required()
@@ -46,12 +37,11 @@ def get_mecanico(id):
         return jsonify({
             'id': mecanico.id,
             'nombre': mecanico.nombre,
-            'apellido': mecanico.apellido,
             'especialidad': mecanico.especialidad,
-            'telefono': mecanico.telefono,
-            'email': mecanico.email,
+            'color': mecanico.color,
             'estado': mecanico.estado,
-            'tarifa_hora': mecanico.tarifa_hora
+            'telefono': mecanico.telefono,
+            'email': mecanico.email
         }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -62,40 +52,41 @@ def create_mecanico():
     try:
         data = request.get_json()
         
-        # Validar datos requeridos
-        required_fields = ['nombre', 'apellido', 'email', 'especialidad']
+        # Validar campos requeridos
+        required_fields = ['nombre', 'apellido', 'email']
         for field in required_fields:
             if field not in data:
-                return jsonify({"error": f"Campo {field} es requerido"}), 400
+                return jsonify({'error': f'El campo {field} es requerido'}), 400
         
-        # Verificar si ya existe un mecánico con ese email
+        # Verificar si el email ya existe
         if Mecanico.query.filter_by(email=data['email']).first():
-            return jsonify({"error": "Ya existe un mecánico con ese email"}), 400
+            return jsonify({'error': 'El email ya está registrado'}), 400
         
-        nuevo_mecanico = Mecanico(
+        mecanico = Mecanico(
             nombre=data['nombre'],
             apellido=data['apellido'],
-            email=data['email'],
+            especialidad=data.get('especialidad', ''),
+            color=data.get('color', '#B0E0E6'),
+            estado=data.get('estado', 'activo'),
             telefono=data.get('telefono', ''),
-            especialidad=data['especialidad'],
-            tarifa_hora=data.get('tarifa_hora', 0),
-            estado=data.get('estado', 'activo')
+            email=data['email'],
+            tarifa_hora=data.get('tarifa_hora', 0.0)
         )
-        
-        db.session.add(nuevo_mecanico)
+        db.session.add(mecanico)
         db.session.commit()
-        
         return jsonify({
-            "mensaje": "Mecánico creado exitosamente",
-            "mecanico": {
-                'id': nuevo_mecanico.id,
-                'nombre': nuevo_mecanico.nombre,
-                'apellido': nuevo_mecanico.apellido
+            'mensaje': 'Mecánico creado exitosamente',
+            'mecanico': {
+                'id': mecanico.id,
+                'nombre': mecanico.nombre,
+                'apellido': mecanico.apellido,
+                'especialidad': mecanico.especialidad,
+                'email': mecanico.email
             }
         }), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({'error': str(e)}), 400
 
 @mecanicos_bp.route('/<int:id>', methods=['PUT'])
 @jwt_required()
@@ -104,69 +95,37 @@ def update_mecanico(id):
         mecanico = Mecanico.query.get_or_404(id)
         data = request.get_json()
         
-        # Actualizar campos
-        if 'nombre' in data:
-            mecanico.nombre = data['nombre']
-        if 'apellido' in data:
-            mecanico.apellido = data['apellido']
-        if 'email' in data:
-            # Verificar que el email no esté en uso por otro mecánico
-            existing = Mecanico.query.filter_by(email=data['email']).first()
-            if existing and existing.id != id:
-                return jsonify({"error": "Email ya está en uso por otro mecánico"}), 400
-            mecanico.email = data['email']
-        if 'telefono' in data:
-            mecanico.telefono = data['telefono']
-        if 'especialidad' in data:
-            mecanico.especialidad = data['especialidad']
-        if 'tarifa_hora' in data:
-            mecanico.tarifa_hora = data['tarifa_hora']
-        if 'estado' in data:
-            mecanico.estado = data['estado']
+        mecanico.nombre = data.get('nombre', mecanico.nombre)
+        mecanico.especialidad = data.get('especialidad', mecanico.especialidad)
+        mecanico.color = data.get('color', mecanico.color)
+        mecanico.estado = data.get('estado', mecanico.estado)
+        mecanico.telefono = data.get('telefono', mecanico.telefono)
+        mecanico.email = data.get('email', mecanico.email)
         
         db.session.commit()
-        
         return jsonify({
-            "mensaje": "Mecánico actualizado exitosamente",
-            "mecanico": {
+            'mensaje': 'Mecánico actualizado exitosamente',
+            'mecanico': {
                 'id': mecanico.id,
                 'nombre': mecanico.nombre,
-                'apellido': mecanico.apellido,
-                'especialidad': mecanico.especialidad,
-                'email': mecanico.email,
-                'telefono': mecanico.telefono,
-                'estado': mecanico.estado,
-                'tarifa_hora': mecanico.tarifa_hora
+                'especialidad': mecanico.especialidad
             }
         }), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({'error': str(e)}), 400
 
 @mecanicos_bp.route('/<int:id>', methods=['DELETE'])
 @jwt_required()
 def delete_mecanico(id):
     try:
         mecanico = Mecanico.query.get_or_404(id)
-        
-        # Verificar si tiene servicios activos
-        servicios_activos = Servicio.query.filter(
-            Servicio.mecanico_id == mecanico.id,
-            Servicio.estado.in_(['pendiente', 'diagnostico', 'en_progreso', 'pausado'])
-        ).count()
-        
-        if servicios_activos > 0:
-            return jsonify({
-                "error": f"No se puede eliminar el mecánico porque tiene {servicios_activos} servicios activos"
-            }), 400
-        
         db.session.delete(mecanico)
         db.session.commit()
-        
-        return jsonify({"mensaje": "Mecánico eliminado exitosamente"}), 200
+        return jsonify({'mensaje': 'Mecánico eliminado exitosamente'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({'error': str(e)}), 400
 
 @mecanicos_bp.route('/<int:id>/servicios', methods=['GET'])
 @jwt_required()

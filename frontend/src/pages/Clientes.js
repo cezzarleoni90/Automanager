@@ -27,6 +27,10 @@ import {
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -41,7 +45,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { getClientes, updateCliente, createCliente, deleteCliente } from '../services/api';
+import { getClientes, updateCliente, createCliente, deleteCliente, createVehiculoCliente, updateVehiculo } from '../services/api';
 
 function Clientes() {
   const navigate = useNavigate();
@@ -63,6 +67,8 @@ function Clientes() {
   const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
   const [dialogoClienteAbierto, setDialogoClienteAbierto] = useState(false);
   const [clienteDetalle, setClienteDetalle] = useState(null);
+  const [openVehiculoDialog, setOpenVehiculoDialog] = useState(false);
+  const [vehiculoActual, setVehiculoActual] = useState(null);
 
   useEffect(() => {
     cargarClientes();
@@ -197,25 +203,103 @@ function Clientes() {
     navigate(`/vehiculos?vehiculo=${vehiculoId}`);
   };
 
-  const handleAgregarVehiculo = (cliente) => {
+  const handleAgregarVehiculo = async (cliente) => {
     if (!cliente || !cliente.id) {
       setError('Error: No se pudo obtener la información del cliente');
       return;
     }
 
-    const clienteData = {
-      id: cliente.id,
-      nombre: cliente.nombre,
-      apellido: cliente.apellido
-    };
+    // Asegurarnos de que clienteDetalle esté actualizado
+    setClienteDetalle(cliente);
 
-    console.log('Navegando a vehículos con datos del cliente:', clienteData);
-
-    navigate('/vehiculos', { 
-      state: clienteData
+    // Inicializar el estado del vehículo antes de abrir el diálogo
+    setVehiculoActual({
+      marca: '',
+      modelo: '',
+      año: '',
+      placa: '',
+      color: '',
+      kilometraje: '',
+      tipo_combustible: '',
+      transmision: '',
+      vin: '',
+      ultimo_servicio: null
     });
-    
-    setDialogoClienteAbierto(false);
+    setOpenVehiculoDialog(true);
+  };
+
+  const handleCloseVehiculoDialog = () => {
+    setOpenVehiculoDialog(false);
+    setVehiculoActual(null);
+  };
+
+  const handleVehiculoInputChange = (e) => {
+    const { name, value } = e.target;
+    setVehiculoActual(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleVehiculoSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      // Validar campos requeridos
+      const camposRequeridos = ['marca', 'modelo', 'año', 'placa'];
+      const camposFaltantes = camposRequeridos.filter(campo => !vehiculoActual[campo]);
+      
+      if (camposFaltantes.length > 0) {
+        setError(`Los siguientes campos son obligatorios: ${camposFaltantes.join(', ')}`);
+        return;
+      }
+
+      // Verificar que tenemos un cliente válido
+      if (!clienteDetalle || !clienteDetalle.id) {
+        setError('Error: No se pudo obtener la información del cliente');
+        return;
+      }
+
+      const nuevoVehiculo = {
+        marca: vehiculoActual.marca,
+        modelo: vehiculoActual.modelo,
+        año: vehiculoActual.año,
+        placa: vehiculoActual.placa,
+        color: vehiculoActual.color || '',
+        kilometraje: vehiculoActual.kilometraje || '',
+        tipo_combustible: vehiculoActual.tipo_combustible || '',
+        transmision: vehiculoActual.transmision || '',
+        vin: vehiculoActual.vin || '',
+        ultimo_servicio: null
+      };
+
+      const response = await createVehiculoCliente(clienteDetalle.id, nuevoVehiculo);
+      if (response && response.vehiculo) {
+        setSuccess('Vehículo creado exitosamente');
+        handleCloseVehiculoDialog();
+        cargarClientes(); // Recargar la lista de clientes para actualizar los vehículos
+      } else {
+        throw new Error('No se recibió la información del vehículo creado');
+      }
+    } catch (error) {
+      console.error('Error al crear vehículo:', error);
+      setError(error.message || 'Error al crear el vehículo');
+    }
+  };
+
+  const handleOpenVehiculoDialog = () => {
+    setVehiculoActual({
+      marca: '',
+      modelo: '',
+      año: '',
+      placa: '',
+      color: '',
+      kilometraje: '',
+      tipo_combustible: '',
+      transmision: '',
+      vin: '',
+      ultimo_servicio: null
+    });
+    setOpenVehiculoDialog(true);
   };
 
   const clientesFiltrados = clientes.filter((cliente) =>
@@ -600,6 +684,138 @@ function Clientes() {
               Eliminar
             </Button>
           </Box>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal para editar vehículo */}
+      <Dialog open={openVehiculoDialog} onClose={handleCloseVehiculoDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6" component="div">
+              {vehiculoActual?.id ? 'Editar Vehículo' : 'Nuevo Vehículo'}
+            </Typography>
+            {clienteSeleccionado && !vehiculoActual?.id && (
+              <Typography variant="subtitle2" color="text.secondary">
+                Cliente: {clienteSeleccionado.nombre}
+              </Typography>
+            )}
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box component="form" onSubmit={handleVehiculoSubmit} sx={{ mt: 2 }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Marca"
+                  name="marca"
+                  value={vehiculoActual?.marca || ''}
+                  onChange={handleVehiculoInputChange}
+                  required
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Modelo"
+                  name="modelo"
+                  value={vehiculoActual?.modelo || ''}
+                  onChange={handleVehiculoInputChange}
+                  required
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Año"
+                  name="año"
+                  type="number"
+                  value={vehiculoActual?.año || ''}
+                  onChange={handleVehiculoInputChange}
+                  required
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Placa"
+                  name="placa"
+                  value={vehiculoActual?.placa || ''}
+                  onChange={handleVehiculoInputChange}
+                  required
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Color"
+                  name="color"
+                  value={vehiculoActual?.color || ''}
+                  onChange={handleVehiculoInputChange}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Kilometraje"
+                  name="kilometraje"
+                  type="number"
+                  value={vehiculoActual?.kilometraje || ''}
+                  onChange={handleVehiculoInputChange}
+                  InputProps={{
+                    inputProps: { min: 0 }
+                  }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Tipo de Combustible</InputLabel>
+                  <Select
+                    name="tipo_combustible"
+                    value={vehiculoActual?.tipo_combustible || ''}
+                    onChange={handleVehiculoInputChange}
+                    label="Tipo de Combustible"
+                  >
+                    <MenuItem value="">Seleccione un tipo</MenuItem>
+                    <MenuItem value="gasolina">Gasolina</MenuItem>
+                    <MenuItem value="diesel">Diesel</MenuItem>
+                    <MenuItem value="electrico">Eléctrico</MenuItem>
+                    <MenuItem value="hibrido">Híbrido</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Transmisión</InputLabel>
+                  <Select
+                    name="transmision"
+                    value={vehiculoActual?.transmision || ''}
+                    onChange={handleVehiculoInputChange}
+                    label="Transmisión"
+                  >
+                    <MenuItem value="">Seleccione un tipo</MenuItem>
+                    <MenuItem value="manual">Manual</MenuItem>
+                    <MenuItem value="automatica">Automática</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="VIN"
+                  name="vin"
+                  value={vehiculoActual?.vin || ''}
+                  onChange={handleVehiculoInputChange}
+                />
+              </Grid>
+            </Grid>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseVehiculoDialog}>Cancelar</Button>
+          <Button onClick={handleVehiculoSubmit} variant="contained">
+            Guardar
+          </Button>
         </DialogActions>
       </Dialog>
 

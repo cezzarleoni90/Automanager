@@ -200,8 +200,16 @@ def agregar_vehiculo(id):
         # Validar datos requeridos
         required_fields = ['placa', 'marca', 'modelo', 'año']
         for field in required_fields:
-            if field not in data:
-                return jsonify({'error': f'Campo {field} es requerido'}), 400
+            if field not in data or not data[field]:
+                return jsonify({'error': f'Campo {field} es requerido y no puede estar vacío'}), 400
+        
+        # Validar que el año sea un número válido
+        try:
+            año = int(data['año'])
+            if año <= 0:
+                return jsonify({'error': 'El año debe ser un número positivo'}), 400
+        except ValueError:
+            return jsonify({'error': 'El año debe ser un número válido'}), 400
         
         # Verificar si la placa ya existe
         if Vehiculo.query.filter_by(placa=data['placa']).first():
@@ -213,9 +221,12 @@ def agregar_vehiculo(id):
             placa=data['placa'],
             marca=data['marca'],
             modelo=data['modelo'],
-            año=data['año'],
+            año=año,
             color=data.get('color', ''),
-            estado='activo'
+            kilometraje=data.get('kilometraje'),
+            tipo_combustible=data.get('tipo_combustible'),
+            transmision=data.get('transmision'),
+            vin=data.get('vin')
         )
         
         db.session.add(nuevo_vehiculo)
@@ -230,7 +241,6 @@ def agregar_vehiculo(id):
                 'modelo': nuevo_vehiculo.modelo,
                 'año': nuevo_vehiculo.año,
                 'color': nuevo_vehiculo.color,
-                'estado': nuevo_vehiculo.estado,
                 'cliente': f"{cliente.nombre} {cliente.apellido}"
             }
         }), 201

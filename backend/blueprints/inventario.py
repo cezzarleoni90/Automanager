@@ -1,9 +1,124 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 from models import Repuesto, MovimientoInventario, db
-from datetime import datetime
+from datetime import datetime, timedelta
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from functools import wraps
 
 inventario_bp = Blueprint('inventario', __name__)
+
+COLORES_PASTEL = [
+    # ... (lista de más de 100 colores pastel, como la que te di antes) ...
+]
+
+class InventarioError(Exception):
+    """Clase base para errores de inventario"""
+    pass
+
+class StockInsuficienteError(InventarioError):
+    """Error cuando no hay suficiente stock"""
+    pass
+
+class RepuestoNoEncontradoError(InventarioError):
+    """Error cuando no se encuentra el repuesto"""
+    pass
+
+class CodigoDuplicadoError(InventarioError):
+    """Error cuando el código del repuesto ya existe"""
+    pass
+
+def handle_error(e):
+    """Manejador centralizado de errores"""
+    if isinstance(e, StockInsuficienteError):
+        return jsonify({'error': str(e)}), 400
+    elif isinstance(e, RepuestoNoEncontradoError):
+        return jsonify({'error': str(e)}), 404
+    elif isinstance(e, CodigoDuplicadoError):
+        return jsonify({'error': str(e)}), 400
+    elif isinstance(e, IntegrityError):
+        return jsonify({'error': 'Error de integridad en la base de datos'}), 400
+    elif isinstance(e, SQLAlchemyError):
+        return jsonify({'error': 'Error en la base de datos'}), 500
+    else:
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+def validar_repuesto(data, es_actualizacion=False):
+    """Valida los datos de un repuesto"""
+    errores = []
+    
+    # Validar campos requeridos
+    campos_requeridos = ['codigo', 'nombre', 'categoria', 'precio_compra', 'precio_venta']
+    for campo in campos_requeridos:
+        if not es_actualizacion and campo not in data:
+            errores.append(f'El campo {campo} es requerido')
+    
+    # Validar tipos de datos
+    if 'stock' in data and not isinstance(data['stock'], (int, float)):
+        errores.append('El stock debe ser un número')
+    if 'stock_minimo' in data and not isinstance(data['stock_minimo'], (int, float)):
+        errores.append('El stock mínimo debe ser un número')
+    if 'precio_compra' in data and not isinstance(data['precio_compra'], (int, float)):
+        errores.append('El precio de compra debe ser un número')
+    if 'precio_venta' in data and not isinstance(data['precio_venta'], (int, float)):
+        errores.append('El precio de venta debe ser un número')
+    
+    # Validar valores positivos
+    if 'stock' in data and data['stock'] < 0:
+        errores.append('El stock no puede ser negativo')
+    if 'stock_minimo' in data and data['stock_minimo'] < 0:
+        errores.append('El stock mínimo no puede ser negativo')
+    if 'precio_compra' in data and data['precio_compra'] <= 0:
+        errores.append('El precio de compra debe ser mayor a 0')
+    if 'precio_venta' in data and data['precio_venta'] <= 0:
+        errores.append('El precio de venta debe ser mayor a 0')
+    
+    # Validar longitud de campos
+    if 'codigo' in data and len(data['codigo']) > 50:
+        errores.append('El código no puede tener más de 50 caracteres')
+    if 'nombre' in data and len(data['nombre']) > 100:
+        errores.append('El nombre no puede tener más de 100 caracteres')
+    if 'categoria' in data and len(data['categoria']) > 50:
+        errores.append('La categoría no puede tener más de 50 caracteres')
+    
+    return errores
+
+def validar_movimiento(data):
+    """Valida los datos de un movimiento de inventario"""
+    errores = []
+    
+    # Validar campos requeridos
+    campos_requeridos = ['repuesto_id', 'tipo', 'cantidad']
+    for campo in campos_requeridos:
+        if campo not in data:
+            errores.append(f'El campo {campo} es requerido')
+    
+    # Validar tipo de movimiento
+    if 'tipo' in data and data['tipo'] not in ['entrada', 'salida']:
+        errores.append('El tipo debe ser "entrada" o "salida"')
+    
+    # Validar cantidad
+    if 'cantidad' in data:
+        try:
+            cantidad = int(data['cantidad'])
+            if cantidad <= 0:
+                errores.append('La cantidad debe ser mayor a 0')
+        except ValueError:
+            errores.append('La cantidad debe ser un número entero')
+    
+    return errores
+
+def transaction_handler(f):
+    """Decorador para manejar transacciones de base de datos"""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        try:
+            result = f(*args, **kwargs)
+            db.session.commit()
+            return result
+        except Exception as e:
+            db.session.rollback()
+            return handle_error(e)
+    return wrapper
 
 # ========== REPUESTOS ==========
 
@@ -29,7 +144,7 @@ def get_repuestos():
             } for r in repuestos]
         }), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return handle_error(e)
 
 # Obtener repuesto por ID
 @inventario_bp.route('/repuestos/<int:id>', methods=['GET'])
@@ -51,55 +166,49 @@ def get_repuesto(id):
             'estado': repuesto.estado
         }), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return handle_error(e)
 
 # Crear repuesto
 @inventario_bp.route('/repuestos', methods=['POST'])
 @jwt_required()
+@transaction_handler
 def create_repuesto():
-    try:
-        data = request.get_json()
-        
-        # Validar campos requeridos
-        required_fields = ['codigo', 'nombre', 'categoria', 'precio_compra', 'precio_venta']
-        for field in required_fields:
-            if field not in data:
-                return jsonify({'error': f'Campo {field} es requerido'}), 400
-        
-        # Verificar código único
-        if Repuesto.query.filter_by(codigo=data['codigo']).first():
-            return jsonify({'error': 'El código del repuesto ya existe'}), 400
-        
-        # Crear repuesto
-        repuesto = Repuesto(
-            codigo=data['codigo'],
-            nombre=data['nombre'],
-            descripcion=data.get('descripcion', ''),
-            categoria=data['categoria'],
-            stock=data.get('stock', 0),
-            stock_minimo=data.get('stock_minimo', 0),
-            precio_compra=float(data['precio_compra']),
-            precio_venta=float(data['precio_venta']),
-            estado='activo'
-        )
-        
-        db.session.add(repuesto)
-        db.session.commit()
-        
-        return jsonify({
-            'mensaje': 'Repuesto creado exitosamente',
-            'repuesto': {
-                'id': repuesto.id,
-                'codigo': repuesto.codigo,
-                'nombre': repuesto.nombre,
-                'categoria': repuesto.categoria,
-                'stock_actual': repuesto.stock
-            }
-        }), 201
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+    data = request.get_json()
+    
+    # Validar datos
+    errores = validar_repuesto(data)
+    if errores:
+        return jsonify({'error': errores}), 400
+    
+    # Verificar código único
+    if Repuesto.query.filter_by(codigo=data['codigo']).first():
+        raise CodigoDuplicadoError(f'El código del repuesto {data["codigo"]} ya existe')
+    
+    # Crear repuesto
+    repuesto = Repuesto(
+        codigo=data['codigo'],
+        nombre=data['nombre'],
+        descripcion=data.get('descripcion', ''),
+        categoria=data['categoria'],
+        stock=data.get('stock', 0),
+        stock_minimo=data.get('stock_minimo', 0),
+        precio_compra=float(data['precio_compra']),
+        precio_venta=float(data['precio_venta']),
+        estado='activo'
+    )
+    
+    db.session.add(repuesto)
+    
+    return jsonify({
+        'mensaje': 'Repuesto creado exitosamente',
+        'repuesto': {
+            'id': repuesto.id,
+            'codigo': repuesto.codigo,
+            'nombre': repuesto.nombre,
+            'categoria': repuesto.categoria,
+            'stock_actual': repuesto.stock
+        }
+    }), 201
 
 # Actualizar repuesto
 @inventario_bp.route('/repuestos/<int:id>', methods=['PUT'])
@@ -113,7 +222,7 @@ def update_repuesto(id):
         if 'codigo' in data:
             existing = Repuesto.query.filter_by(codigo=data['codigo']).first()
             if existing and existing.id != id:
-                return jsonify({'error': 'El código del repuesto ya existe'}), 400
+                raise CodigoDuplicadoError(f'El código del repuesto {data["codigo"]} ya existe')
             repuesto.codigo = data['codigo']
         
         # Actualizar campos
@@ -149,7 +258,7 @@ def update_repuesto(id):
         
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return handle_error(e)
 
 # Eliminar repuesto (mejorado)
 @inventario_bp.route('/repuestos/<int:id>', methods=['DELETE'])
@@ -188,70 +297,62 @@ def delete_repuesto(id):
         db.session.rollback()
         # Registrar el error para debug
         print(f"Error al eliminar repuesto {id}: {str(e)}")
-        return jsonify({'error': f'Error interno: {str(e)}'}), 500
+        return handle_error(e)
 
 # ========== MOVIMIENTOS ==========
 
 # Crear movimiento de inventario (corrigido)
 @inventario_bp.route('/movimientos', methods=['POST'])
 @jwt_required()
+@transaction_handler
 def create_movimiento():
-    try:
-        data = request.get_json()
-        
-        # Validar campos requeridos
-        required_fields = ['repuesto_id', 'tipo', 'cantidad']
-        for field in required_fields:
-            if field not in data:
-                return jsonify({'error': f'Campo {field} es requerido'}), 400
-        
-        # Obtener repuesto
-        repuesto = Repuesto.query.get_or_404(data['repuesto_id'])
-        
-        # Validar tipo
-        if data['tipo'] not in ['entrada', 'salida']:
-            return jsonify({'error': 'Tipo debe ser entrada o salida'}), 400
-        
-        # Validar cantidad para salida
-        cantidad = int(data['cantidad'])
-        if data['tipo'] == 'salida' and repuesto.stock < cantidad:
-            return jsonify({'error': 'Stock insuficiente'}), 400
-        
-        # Crear movimiento
-        movimiento = MovimientoInventario(
-            repuesto_id=data['repuesto_id'],
-            tipo=data['tipo'],
-            cantidad=cantidad,
-            notas=data.get('motivo', ''),  # ✅ Cambiar a 'notas' pero mantener compatibilidad con 'motivo'
-            fecha=datetime.utcnow(),
-            servicio_id=data.get('servicio_id'),
-            usuario_id=data.get('usuario_id')
-        )
-        
-        # Actualizar stock
-        if data['tipo'] == 'entrada':
-            repuesto.stock += cantidad
-        else:  # salida
-            repuesto.stock -= cantidad
-        
-        repuesto.fecha_actualizacion = datetime.utcnow()
-        
-        db.session.add(movimiento)
-        db.session.commit()
-        
-        return jsonify({
-            'mensaje': 'Movimiento registrado exitosamente',
-            'movimiento': {
-                'id': movimiento.id,
-                'tipo': movimiento.tipo,
-                'cantidad': movimiento.cantidad,
-                'stock_actual': repuesto.stock
-            }
-        }), 201
-        
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+    data = request.get_json()
+    
+    # Validar datos
+    errores = validar_movimiento(data)
+    if errores:
+        return jsonify({'error': errores}), 400
+    
+    # Obtener repuesto
+    repuesto = Repuesto.query.get(data['repuesto_id'])
+    if not repuesto:
+        raise RepuestoNoEncontradoError(f"Repuesto con ID {data['repuesto_id']} no encontrado")
+    
+    # Validar cantidad para salida
+    cantidad = int(data['cantidad'])
+    if data['tipo'] == 'salida' and repuesto.stock < cantidad:
+        raise StockInsuficienteError(f'Stock insuficiente. Stock actual: {repuesto.stock}, Cantidad solicitada: {cantidad}')
+    
+    # Crear movimiento
+    movimiento = MovimientoInventario(
+        repuesto_id=data['repuesto_id'],
+        tipo=data['tipo'],
+        cantidad=cantidad,
+        notas=data.get('motivo', ''),
+        fecha=datetime.utcnow(),
+        servicio_id=data.get('servicio_id'),
+        usuario_id=data.get('usuario_id')
+    )
+    
+    # Actualizar stock
+    if data['tipo'] == 'entrada':
+        repuesto.stock += cantidad
+    else:  # salida
+        repuesto.stock -= cantidad
+    
+    repuesto.fecha_actualizacion = datetime.utcnow()
+    
+    db.session.add(movimiento)
+    
+    return jsonify({
+        'mensaje': 'Movimiento registrado exitosamente',
+        'movimiento': {
+            'id': movimiento.id,
+            'tipo': movimiento.tipo,
+            'cantidad': movimiento.cantidad,
+            'stock_actual': repuesto.stock
+        }
+    }), 201
 
 # Obtener movimientos de un repuesto (corregido)
 @inventario_bp.route('/repuestos/<int:id>/movimientos', methods=['GET'])
@@ -272,10 +373,10 @@ def get_movimientos_repuesto(id):
                 'id': m.id,
                 'tipo': m.tipo,
                 'cantidad': m.cantidad,
-                'notas': m.notas,  # ✅ Cambiar de 'motivo' a 'notas'
+                'notas': m.notas,
                 'fecha': m.fecha.isoformat()
             } for m in movimientos]
         }), 200
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500 
+        return handle_error(e) 
