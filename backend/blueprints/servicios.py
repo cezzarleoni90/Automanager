@@ -145,6 +145,46 @@ def get_servicios():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@servicios_bp.route('/<int:id>', methods=['GET'])
+@jwt_required()
+def get_servicio(id):
+    try:
+        servicio = Servicio.query.get_or_404(id)
+        return jsonify({
+            'id': servicio.id,
+            'titulo': servicio.titulo,
+            'descripcion': servicio.descripcion,
+            'fecha_inicio': servicio.fecha_inicio.isoformat() if servicio.fecha_inicio else None,
+            'fecha_fin': servicio.fecha_fin.isoformat() if servicio.fecha_fin else None,
+            'estado': servicio.estado,
+            'mecanico_id': servicio.mecanico_id,
+            'cliente_id': servicio.cliente_id,
+            'vehiculo_id': servicio.vehiculo_id,
+            'costo': servicio.costo,
+            'notas': servicio.notas,
+            'mecanico': {
+                'id': servicio.mecanico.id,
+                'nombre': servicio.mecanico.nombre,
+                'apellido': servicio.mecanico.apellido,
+                'especialidad': servicio.mecanico.especialidad
+            } if servicio.mecanico else None,
+            'vehiculo': {
+                'id': servicio.vehiculo.id,
+                'placa': servicio.vehiculo.placa,
+                'marca': servicio.vehiculo.marca,
+                'modelo': servicio.vehiculo.modelo
+            } if servicio.vehiculo else None,
+            'cliente': {
+                'id': servicio.cliente.id,
+                'nombre': servicio.cliente.nombre,
+                'apellido': servicio.cliente.apellido,
+                'email': servicio.cliente.email,
+                'telefono': servicio.cliente.telefono
+            } if servicio.cliente else None
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @servicios_bp.route('/', methods=['POST'])
 @jwt_required()
 def create_servicio():

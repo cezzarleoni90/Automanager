@@ -85,7 +85,7 @@ function Servicios() {
   const [success, setSuccess] = useState('');
   const [openDialog, setOpenDialog] = useState(false);
   const servicioVacio = {
-    tipo_servicio: 'diagnostico',
+    tipo_servicio: 'mantenimiento',
     descripcion: '',
     fecha_inicio: new Date().toISOString().split('T')[0],
     fecha_fin: null,
@@ -408,7 +408,7 @@ function Servicios() {
 
       // Preparar los datos para enviar al backend
       const datosServicio = {
-        tipo_servicio: servicioActual.tipo_servicio,
+        tipo_servicio: servicioActual.tipo_servicio || 'mantenimiento', // Valor por defecto si es undefined
         descripcion: servicioActual.descripcion,
         titulo: servicioActual.descripcion.substring(0, 100),
         vehiculo_id: Number(vehiculoId),
@@ -429,37 +429,19 @@ function Servicios() {
 
       console.log('Enviando datos del servicio:', datosServicio);
 
-      // Asegurarnos de que la URL termine con /
-      const url = servicioActual.id
-        ? `http://localhost:5000/api/servicios/${servicioActual.id}/`
-        : 'http://localhost:5000/api/servicios/';
-      
-      const method = servicioActual.id ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(datosServicio),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Error del servidor:', errorData);
-        throw new Error(errorData.error || 'Error al guardar el servicio');
+      // Usar la función updateServicio del servicio API
+      if (servicioActual.id) {
+        await updateServicio(servicioActual.id, datosServicio);
+      } else {
+        await createServicio(datosServicio);
       }
-
-      const responseData = await response.json();
-      console.log('Respuesta del servidor:', responseData);
 
       setSuccess(`Servicio ${servicioActual.id ? 'actualizado' : 'creado'} exitosamente`);
       handleCloseDialog();
       cargarServicios();
     } catch (error) {
       console.error('Error al guardar servicio:', error);
-      setError(error.message);
+      setError(error.message || 'Error al guardar el servicio');
     } finally {
       setLoading(false);
     }
@@ -1267,9 +1249,10 @@ function Servicios() {
           {pestanaActiva === 'detalles' && servicioSeleccionado && (
             <Box sx={{ p: 3 }}>
               <Grid container spacing={3}>
+                {/* Información General */}
                 <Grid item xs={12} md={6}>
-                  <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight="bold">
+                  <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+                    <Typography variant="subtitle1" gutterBottom fontWeight="bold" color="primary">
                       Información General
                     </Typography>
                     <Box sx={{ mt: 2 }}>
@@ -1278,216 +1261,173 @@ function Servicios() {
                           <Typography variant="body2" color="text.secondary">Tipo:</Typography>
                         </Grid>
                         <Grid item xs={8}>
-                          <Typography variant="body2">{servicioSeleccionado.tipo_servicio}</Typography>
+                          <Chip 
+                            label={servicioSeleccionado.tipo_servicio} 
+                            color="primary" 
+                            size="small"
+                            sx={{ textTransform: 'capitalize' }}
+                          />
                         </Grid>
                         
                         <Grid item xs={4}>
                           <Typography variant="body2" color="text.secondary">Estado:</Typography>
                         </Grid>
                         <Grid item xs={8}>
-                          <Chip
+                          <Chip 
                             label={formatEstadoLabel(servicioSeleccionado.estado)}
                             color={
                               servicioSeleccionado.estado === 'completado' ? 'success' :
-                              servicioSeleccionado.estado === 'en_progreso' ? 'warning' :
-                              servicioSeleccionado.estado === 'diagnostico' ? 'info' :
-                              servicioSeleccionado.estado === 'cancelado' ? 'error' : 
-                              'primary'
+                              servicioSeleccionado.estado === 'cancelado' ? 'error' :
+                              servicioSeleccionado.estado === 'en_progreso' ? 'primary' :
+                              servicioSeleccionado.estado === 'pausado' ? 'warning' :
+                              'default'
                             }
                             size="small"
-                            sx={{ 
-                              fontWeight: 'medium',
-                              '&.MuiChip-colorSuccess': {
-                                bgcolor: '#4CAF50',
-                                color: 'white'
-                              },
-                              '&.MuiChip-colorWarning': {
-                                bgcolor: '#FF9800',
-                                color: 'white'
-                              },
-                              '&.MuiChip-colorInfo': {
-                                bgcolor: '#2196F3',
-                                color: 'white'
-                              },
-                              '&.MuiChip-colorSecondary': {
-                                bgcolor: '#9C27B0',
-                                color: 'white'
-                              },
-                              '&.MuiChip-colorError': {
-                                bgcolor: '#F44336',
-                                color: 'white'
-                              },
-                              '&.MuiChip-colorPrimary': {
-                                bgcolor: '#3F51B5',
-                                color: 'white'
-                              }
-                            }}
                           />
                         </Grid>
-                        
+
                         <Grid item xs={4}>
-                          <Typography variant="body2" color="text.secondary">Fecha de inicio:</Typography>
+                          <Typography variant="body2" color="text.secondary">Fecha Inicio:</Typography>
                         </Grid>
                         <Grid item xs={8}>
                           <Typography variant="body2">
-                            {servicioSeleccionado.fecha_inicio ? new Date(servicioSeleccionado.fecha_inicio).toLocaleDateString() : 'No disponible'}
+                            {formatDateTime(servicioSeleccionado.fecha_inicio)}
                           </Typography>
                         </Grid>
-                        
-                        {servicioSeleccionado.fecha_fin && (
-                          <>
-                            <Grid item xs={4}>
-                              <Typography variant="body2" color="text.secondary">Fecha de fin:</Typography>
-                            </Grid>
-                            <Grid item xs={8}>
-                              <Typography variant="body2">
-                                {new Date(servicioSeleccionado.fecha_fin).toLocaleDateString()}
-                              </Typography>
-                            </Grid>
-                          </>
-                        )}
+
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Fecha Fin:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {servicioSeleccionado.fecha_fin ? formatDateTime(servicioSeleccionado.fecha_fin) : 'Pendiente'}
+                          </Typography>
+                        </Grid>
+
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Costo:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2" fontWeight="bold" color="primary">
+                            ${servicioSeleccionado.costo?.toLocaleString('es-CO') || '0'}
+                          </Typography>
+                        </Grid>
                       </Grid>
                     </Box>
                   </Paper>
                 </Grid>
-                
+
+                {/* Información del Vehículo */}
                 <Grid item xs={12} md={6}>
-                  <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-                      Vehículo y Cliente
+                  <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+                    <Typography variant="subtitle1" gutterBottom fontWeight="bold" color="primary">
+                      Información del Vehículo
                     </Typography>
-                    {servicioSeleccionado.vehiculo ? (
-                      <Box sx={{ mt: 2 }}>
-                        <Grid container spacing={2}>
-                          <Grid item xs={4}>
-                            <Typography variant="body2" color="text.secondary">Vehículo:</Typography>
-                          </Grid>
-                          <Grid item xs={8}>
-                            <Typography variant="body2">
-                              {servicioSeleccionado.vehiculo.marca} {servicioSeleccionado.vehiculo.modelo}
-                            </Typography>
-                          </Grid>
-                          
-                          <Grid item xs={4}>
-                            <Typography variant="body2" color="text.secondary">Placa:</Typography>
-                          </Grid>
-                          <Grid item xs={8}>
-                            <Typography variant="body2">{servicioSeleccionado.vehiculo.placa}</Typography>
-                          </Grid>
-                          
-                          <Grid item xs={4}>
-                            <Typography variant="body2" color="text.secondary">Año:</Typography>
-                          </Grid>
-                          <Grid item xs={8}>
-                            <Typography variant="body2">{servicioSeleccionado.vehiculo.año || 'No disponible'}</Typography>
-                          </Grid>
-                          
-                          {servicioSeleccionado.cliente && (
-                            <>
-                              <Grid item xs={4}>
-                                <Typography variant="body2" color="text.secondary">Cliente:</Typography>
-                              </Grid>
-                              <Grid item xs={8}>
-                                <Typography variant="body2">
-                                  {servicioSeleccionado.cliente.nombre} {servicioSeleccionado.cliente.apellido}
-                                </Typography>
-                              </Grid>
-                              
-                              <Grid item xs={4}>
-                                <Typography variant="body2" color="text.secondary">Teléfono:</Typography>
-                              </Grid>
-                              <Grid item xs={8}>
-                                <Typography variant="body2">{servicioSeleccionado.cliente.telefono || 'No disponible'}</Typography>
-                              </Grid>
-                            </>
-                          )}
-                        </Grid>
-                      </Box>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        No hay información del vehículo disponible
-                      </Typography>
-                    )}
-                  </Paper>
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-                      Descripción del Servicio
-                    </Typography>
-                    <Typography variant="body2" sx={{ mt: 1 }}>
-                      {servicioSeleccionado.descripcion || 'No hay descripción disponible'}
-                    </Typography>
-                  </Paper>
-                </Grid>
-                
-                <Grid item xs={12} md={6}>
-                  <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-                      Mecánico Asignado
-                    </Typography>
-                    {servicioSeleccionado.mecanico_id && mecanicos.find(m => m.id === Number(servicioSeleccionado.mecanico_id)) ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
-                        <PersonIcon color="primary" />
-                        <Box sx={{ ml: 2 }}>
-                          <Typography>
-                            {mecanicos.find(m => m.id === Number(servicioSeleccionado.mecanico_id))?.nombre} {' '}
-                            {mecanicos.find(m => m.id === Number(servicioSeleccionado.mecanico_id))?.apellido}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {mecanicos.find(m => m.id === Number(servicioSeleccionado.mecanico_id))?.especialidad}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                        No hay mecánico asignado a este servicio
-                      </Typography>
-                    )}
-                  </Paper>
-                </Grid>
-                
-                <Grid item xs={12} md={6}>
-                  <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-                      Datos Adicionales
-                    </Typography>
-                    <Box sx={{ mt: 1 }}>
+                    <Box sx={{ mt: 2 }}>
                       <Grid container spacing={2}>
-                        {servicioSeleccionado.kilometraje_entrada && (
-                          <>
-                            <Grid item xs={6}>
-                              <Typography variant="body2" color="text.secondary">Kilometraje:</Typography>
-                            </Grid>
-                            <Grid item xs={6}>
-                              <Typography variant="body2">{servicioSeleccionado.kilometraje_entrada} km</Typography>
-                            </Grid>
-                          </>
-                        )}
-                        
-                        {servicioSeleccionado.costo_estimado > 0 && (
-                          <>
-                            <Grid item xs={6}>
-                              <Typography variant="body2" color="text.secondary">Costo estimado:</Typography>
-                            </Grid>
-                            <Grid item xs={6}>
-                              <Typography variant="body2">${servicioSeleccionado.costo_estimado.toFixed(2)}</Typography>
-                            </Grid>
-                          </>
-                        )}
-                        
-                        {servicioSeleccionado.costo_real > 0 && (
-                          <>
-                            <Grid item xs={6}>
-                              <Typography variant="body2" color="text.secondary">Costo real:</Typography>
-                            </Grid>
-                            <Grid item xs={6}>
-                              <Typography variant="body2">${servicioSeleccionado.costo_real.toFixed(2)}</Typography>
-                            </Grid>
-                          </>
-                        )}
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Placa:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2" fontWeight="bold">
+                            {servicioSeleccionado.vehiculo?.placa || 'No asignado'}
+                          </Typography>
+                        </Grid>
+
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Marca:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {servicioSeleccionado.vehiculo?.marca || 'No asignado'}
+                          </Typography>
+                        </Grid>
+
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Modelo:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {servicioSeleccionado.vehiculo?.modelo || 'No asignado'}
+                          </Typography>
+                        </Grid>
+
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Cliente:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {servicioSeleccionado.cliente ? 
+                              `${servicioSeleccionado.cliente.nombre} ${servicioSeleccionado.cliente.apellido}` : 
+                              'No asignado'}
+                          </Typography>
+                        </Grid>
                       </Grid>
+                    </Box>
+                  </Paper>
+                </Grid>
+
+                {/* Información del Mecánico */}
+                <Grid item xs={12} md={6}>
+                  <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+                    <Typography variant="subtitle1" gutterBottom fontWeight="bold" color="primary">
+                      Información del Mecánico
+                    </Typography>
+                    <Box sx={{ mt: 2 }}>
+                      <Grid container spacing={2}>
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Nombre:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {servicioSeleccionado.mecanico ? 
+                              `${servicioSeleccionado.mecanico.nombre} ${servicioSeleccionado.mecanico.apellido}` : 
+                              'No asignado'}
+                          </Typography>
+                        </Grid>
+
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Especialidad:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {servicioSeleccionado.mecanico?.especialidad || 'No asignado'}
+                          </Typography>
+                        </Grid>
+
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Contacto:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {servicioSeleccionado.mecanico?.telefono || 'No disponible'}
+                          </Typography>
+                        </Grid>
+                      </Grid>
+                    </Box>
+                  </Paper>
+                </Grid>
+
+                {/* Descripción y Notas */}
+                <Grid item xs={12} md={6}>
+                  <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+                    <Typography variant="subtitle1" gutterBottom fontWeight="bold" color="primary">
+                      Descripción y Notas
+                    </Typography>
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        Descripción:
+                      </Typography>
+                      <Typography variant="body2" sx={{ mb: 2 }}>
+                        {servicioSeleccionado.descripcion || 'Sin descripción'}
+                      </Typography>
+
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        Notas Adicionales:
+                      </Typography>
+                      <Typography variant="body2">
+                        {servicioSeleccionado.notas || 'Sin notas adicionales'}
+                      </Typography>
                     </Box>
                   </Paper>
                 </Grid>
@@ -1900,7 +1840,7 @@ function Servicios() {
                   <InputLabel>Tipo de Servicio</InputLabel>
                   <Select
                     name="tipo_servicio"
-                    value={servicioActual.tipo_servicio}
+                    value={servicioActual.tipo_servicio || 'mantenimiento'}
                     onChange={handleInputChange}
                     label="Tipo de Servicio"
                     required
@@ -1908,6 +1848,7 @@ function Servicios() {
                     <MenuItem value="mantenimiento">Mantenimiento</MenuItem>
                     <MenuItem value="reparacion">Reparación</MenuItem>
                     <MenuItem value="diagnostico">Diagnóstico</MenuItem>
+                    <MenuItem value="revision">Revisión</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>

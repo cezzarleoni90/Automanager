@@ -94,7 +94,12 @@ export const updateServicio = async (id, data) => {
     console.log(`API: Servicio ${id} actualizado:`, response.status);
     return response.data;
   } catch (error) {
-    return handleApiError(error, `updateServicio(${id})`);
+    console.error('Error al actualizar servicio:', error);
+    if (error.response) {
+      console.error('Datos del error:', error.response.data);
+      console.error('Status del error:', error.response.status);
+    }
+    throw error;
   }
 };
 
