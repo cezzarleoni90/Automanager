@@ -10,6 +10,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../services/api';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '../styles/Calendario.css';
+import Snackbar from '@mui/material/Snackbar';
+import MuiAlert from '@mui/material/Alert';
+import '@fullcalendar/common/main.css';
 
 function toDatetimeLocal(dateString) {
     if (!dateString) return '';
@@ -40,13 +43,41 @@ const Calendario = () => {
         tipo: 'servicio'
     });
 
+    const [openSnackbar, setOpenSnackbar] = useState(false);
+    const [snackbarMessage, setSnackbarMessage] = useState('');
+    const [snackbarSeverity, setSnackbarSeverity] = useState('success'); // 'success', 'error', 'info', 'warning'
+
     useEffect(() => {
-        cargarEventos();
-        cargarMecanicos();
-        cargarServicios();
+        fetchMecanicos();
+        fetchServicios();
+        fetchEvents();
     }, []);
 
-    const cargarEventos = async () => {
+    const fetchMecanicos = async () => {
+        try {
+            const response = await axios.get(`${API_URL}/mecanicos`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setMecanicos(Array.isArray(response.data) ? response.data : []);
+        } catch (error) {
+            console.error('Error al cargar mecánicos:', error);
+            setMecanicos([]);
+        }
+    };
+
+    const fetchServicios = async () => {
+        try {
+            const response = await axios.get(`${API_URL}/servicios`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setServicios(Array.isArray(response.data) ? response.data : []);
+        } catch (error) {
+            console.error('Error al cargar servicios:', error);
+            setServicios([]);
+        }
+    };
+
+    const fetchEvents = async () => {
         try {
             const response = await axios.get(`${API_URL}/eventos`, {
                 headers: { Authorization: `Bearer ${token}` }
@@ -71,30 +102,6 @@ const Calendario = () => {
         } catch (error) {
             console.error('Error al cargar eventos:', error);
             setEventos([]);
-        }
-    };
-
-    const cargarMecanicos = async () => {
-        try {
-            const response = await axios.get(`${API_URL}/mecanicos`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setMecanicos(Array.isArray(response.data) ? response.data : []);
-        } catch (error) {
-            console.error('Error al cargar mecánicos:', error);
-            setMecanicos([]);
-        }
-    };
-
-    const cargarServicios = async () => {
-        try {
-            const response = await axios.get(`${API_URL}/servicios`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setServicios(Array.isArray(response.data) ? response.data : []);
-        } catch (error) {
-            console.error('Error al cargar servicios:', error);
-            setServicios([]);
         }
     };
 
@@ -127,38 +134,95 @@ const Calendario = () => {
         setShowModal(true);
     };
 
-    const handleSubmit = async (e) => {
+    const handleSnackbar = (message, severity = 'success') => {
+        setSnackbarMessage(message);
+        setSnackbarSeverity(severity);
+        setOpenSnackbar(true);
+    };
+
+    const validateForm = () => {
+        if (!formData.titulo.trim()) {
+            handleSnackbar('El título es obligatorio', 'error');
+            return false;
+        }
+        if (!formData.fecha_inicio) {
+            handleSnackbar('La fecha de inicio es obligatoria', 'error');
+            return false;
+        }
+        if (!formData.fecha_fin) {
+            handleSnackbar('La fecha de fin es obligatoria', 'error');
+            return false;
+        }
+        const inicio = new Date(formData.fecha_inicio);
+        const fin = new Date(formData.fecha_fin);
+        if (fin <= inicio) {
+            handleSnackbar('La fecha de fin debe ser posterior a la fecha de inicio', 'error');
+            return false;
+        }
+        if (!formData.mecanico_id) {
+            handleSnackbar('Debe seleccionar un mecánico', 'error');
+            return false;
+        }
+        if (!formData.servicio_id) {
+            handleSnackbar('Debe seleccionar un servicio', 'error');
+            return false;
+        }
+        return true;
+    };
+
+    const handleCreate = async (e) => {
         e.preventDefault();
+        if (!validateForm()) return;
         try {
-            if (selectedEvent) {
-                await axios.put(`${API_URL}/eventos/${selectedEvent.id}`, formData, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-            } else {
-                await axios.post(`${API_URL}/eventos`, formData, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-            }
-            setShowModal(false);
-            cargarEventos();
+            await axios.post(`${API_URL}/eventos`, formData, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            handleSnackbar('Evento creado exitosamente', 'success');
+            handleClose();
+            fetchEvents();
         } catch (error) {
-            console.error('Error al guardar evento:', error);
+            handleSnackbar('Error al crear evento', 'error');
+        }
+    };
+
+    const handleUpdate = async (e) => {
+        e.preventDefault();
+        if (!validateForm()) return;
+        try {
+            await axios.put(`${API_URL}/eventos/${selectedEvent.id}`, formData, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            handleSnackbar('Evento actualizado exitosamente', 'info');
+            handleClose();
+            fetchEvents();
+        } catch (error) {
+            handleSnackbar('Error al actualizar evento', 'error');
         }
     };
 
     const handleDelete = async () => {
-        if (window.confirm('¿Estás seguro de que deseas eliminar este evento?')) {
-            try {
-                await axios.delete(`${API_URL}/eventos/${selectedEvent.id}`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
-                setShowModal(false);
-                cargarEventos();
-            } catch (error) {
-                console.error('Error al eliminar evento:', error);
-            }
+        try {
+            await axios.delete(`${API_URL}/eventos/${selectedEvent.id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            handleSnackbar('Evento eliminado exitosamente', 'warning');
+            handleClose();
+            fetchEvents();
+        } catch (error) {
+            handleSnackbar('Error al eliminar evento', 'error');
         }
     };
+
+    const handleClose = () => {
+        setShowModal(false);
+    };
+
+    // Adaptar eventos para incluir color por mecánico
+    const eventosAdaptados = eventos.map(ev => ({
+        ...ev,
+        backgroundColor: ev.extendedProps?.mecanico?.color || ev.backgroundColor || '#0070F3',
+        borderColor: ev.extendedProps?.mecanico?.color || ev.borderColor || '#0070F3',
+    }));
 
     return (
         <div className="container-fluid p-4">
@@ -179,47 +243,42 @@ const Calendario = () => {
                     </div>
 
                     <FullCalendar
-                        plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-                        initialView="timeGridWeek"
+                        plugins={[
+                            dayGridPlugin,
+                            timeGridPlugin,
+                            interactionPlugin
+                        ]}
+                        initialView="timeGridDay"
                         headerToolbar={{
                             left: 'prev,next today',
                             center: 'title',
                             right: 'dayGridMonth,timeGridWeek,timeGridDay'
                         }}
-                        locale={esLocale}
+                        events={eventosAdaptados}
+                        slotMinTime="05:00:00"
+                        slotMaxTime="20:59:00"
+                        allDaySlot={false}
+                        slotDuration="00:15:00"
+                        slotLabelInterval="01:00"
+                        nowIndicator={true}
+                        eventTimeFormat={{
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true
+                        }}
                         selectable={true}
                         selectMirror={true}
                         dayMaxEvents={true}
                         weekends={true}
-                        events={eventos}
                         select={handleDateSelect}
                         eventClick={handleEventClick}
-                        height="auto"
-                        slotMinTime="08:00:00"
-                        slotMaxTime="18:00:00"
-                        allDaySlot={false}
-                        slotDuration="00:30:00"
-                        eventContent={(eventInfo) => {
-                            return (
-                                <div className="fc-event-main-content">
-                                    <div className="fc-event-title">
-                                        {eventInfo.event.title}
-                                    </div>
-                                    {eventInfo.event.extendedProps.mecanico && (
-                                        <div className="fc-event-mecanico">
-                                            {eventInfo.event.extendedProps.mecanico.nombre}
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        }}
                     />
                 </div>
             </div>
 
             <Dialog
                 open={showModal}
-                onClose={() => setShowModal(false)}
+                onClose={handleClose}
                 maxWidth="sm"
                 fullWidth
                 PaperProps={{
@@ -247,7 +306,7 @@ const Calendario = () => {
                     background: '#fff'
                 }}>{selectedEvent ? 'Editar Evento' : 'Nuevo Evento'}</DialogTitle>
                 <DialogContent>
-                    <form onSubmit={handleSubmit}>
+                    <form onSubmit={selectedEvent ? handleUpdate : handleCreate}>
                         <TextField
                             fullWidth
                             label="Título"
@@ -327,8 +386,8 @@ const Calendario = () => {
                                 label="Mecánico"
                             >
                                 <MenuItem value=""><em>Sin asignar</em></MenuItem>
-                                {mecanicos.map((m) => (
-                                    <MenuItem key={m.id} value={m.id}>{m.nombre}</MenuItem>
+                                {mecanicos && mecanicos.length > 0 && mecanicos.map((m) => (
+                                    <MenuItem key={m.id} value={m.id}>{m.nombre} {m.apellido}</MenuItem>
                                 ))}
                             </Select>
                         </FormControl>
@@ -340,7 +399,7 @@ const Calendario = () => {
                                 label="Servicio"
                             >
                                 <MenuItem value=""><em>Sin asignar</em></MenuItem>
-                                {servicios.map((s) => (
+                                {servicios && servicios.length > 0 && servicios.map((s) => (
                                     <MenuItem key={s.id} value={s.id}>{s.nombre}</MenuItem>
                                 ))}
                             </Select>
@@ -353,7 +412,7 @@ const Calendario = () => {
                             padding: '16px 24px'
                         }}>
                             <Button 
-                                onClick={() => setShowModal(false)} 
+                                onClick={handleClose} 
                                 sx={{
                                     borderRadius: 1,
                                     px: 3,
@@ -409,6 +468,16 @@ const Calendario = () => {
                     </form>
                 </DialogContent>
             </Dialog>
+            <Snackbar
+                open={openSnackbar}
+                autoHideDuration={3000}
+                onClose={() => setOpenSnackbar(false)}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            >
+                <MuiAlert onClose={() => setOpenSnackbar(false)} severity={snackbarSeverity} sx={{ width: '100%' }}>
+                    {snackbarMessage}
+                </MuiAlert>
+            </Snackbar>
         </div>
     );
 };
