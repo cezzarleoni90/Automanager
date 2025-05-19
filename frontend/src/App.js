@@ -8,6 +8,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
 
 // Componentes
 import Layout from './components/Layout';
@@ -35,7 +36,13 @@ const theme = createTheme({
   },
 });
 
-// Este componente se renderiza dentro del AuthProvider
+function toDatetimeLocal(dateString) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const pad = n => n < 10 ? '0' + n : n;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function AppRouter() {
   const router = createBrowserRouter([
     {

@@ -4,12 +4,23 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import esLocale from '@fullcalendar/core/locales/es';
-import { Modal, Button, Form } from 'react-bootstrap';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../services/api';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '../styles/Calendario.css';
+
+function toDatetimeLocal(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const pad = n => n < 10 ? '0' + n : n;
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+const neonBlue = '#00eaff';
+const glassBg = 'linear-gradient(135deg, rgba(30,34,45,0.95) 60%, rgba(0,234,255,0.15) 100%)';
+const modalBg = 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)';
 
 const Calendario = () => {
     const [eventos, setEventos] = useState([]);
@@ -206,98 +217,198 @@ const Calendario = () => {
                 </div>
             </div>
 
-            <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
-                <Modal.Header closeButton>
-                    <Modal.Title>
-                        {selectedEvent ? 'Editar Evento' : 'Nuevo Evento'}
-                    </Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                    <Form onSubmit={handleSubmit}>
-                        <Form.Group className="mb-3">
-                            <Form.Label>Título</Form.Label>
-                            <Form.Control
-                                type="text"
-                                value={formData.titulo}
-                                onChange={(e) => setFormData({...formData, titulo: e.target.value})}
-                                required
-                            />
-                        </Form.Group>
-
-                        <Form.Group className="mb-3">
-                            <Form.Label>Descripción</Form.Label>
-                            <Form.Control
-                                as="textarea"
-                                rows={3}
-                                value={formData.descripcion}
-                                onChange={(e) => setFormData({...formData, descripcion: e.target.value})}
-                            />
-                        </Form.Group>
-
-                        <Form.Group className="mb-3">
-                            <Form.Label>Mecánico</Form.Label>
-                            <Form.Select
+            <Dialog
+                open={showModal}
+                onClose={() => setShowModal(false)}
+                maxWidth="sm"
+                fullWidth
+                PaperProps={{
+                    sx: {
+                        minHeight: '60vh',
+                        maxHeight: '90vh',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        borderRadius: 4,
+                        boxShadow: '0 12px 28px rgba(0, 0, 0, 0.15)',
+                        background: modalBg,
+                        position: 'relative',
+                        overflow: 'hidden',
+                        transition: 'all 0.3s ease',
+                        border: '1px solid #e0e0e0'
+                    }
+                }}
+            >
+                <DialogTitle sx={{
+                    fontWeight: 600,
+                    fontSize: '1.5rem',
+                    color: '#2c3e50',
+                    borderBottom: '1px solid #e9ecef',
+                    padding: '20px 24px',
+                    background: '#fff'
+                }}>{selectedEvent ? 'Editar Evento' : 'Nuevo Evento'}</DialogTitle>
+                <DialogContent>
+                    <form onSubmit={handleSubmit}>
+                        <TextField
+                            fullWidth
+                            label="Título"
+                            value={formData.titulo}
+                            onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
+                            required
+                            margin="normal"
+                        />
+                        <TextField
+                            fullWidth
+                            label="Descripción"
+                            value={formData.descripcion}
+                            onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
+                            multiline
+                            rows={3}
+                            margin="normal"
+                        />
+                        <TextField
+                            fullWidth
+                            label="Fecha Inicio"
+                            type="datetime-local"
+                            value={toDatetimeLocal(formData.fecha_inicio)}
+                            onChange={(e) => setFormData({ ...formData, fecha_inicio: e.target.value })}
+                            required
+                            margin="normal"
+                            InputLabelProps={{ shrink: true }}
+                            sx={{
+                                '& .MuiOutlinedInput-root': {
+                                    '& fieldset': {
+                                        borderColor: '#2196f3',
+                                    },
+                                    '&:hover fieldset': {
+                                        borderColor: '#1976d2',
+                                    },
+                                    '&.Mui-focused fieldset': {
+                                        borderColor: '#2196f3',
+                                    },
+                                    background: '#e3f2fd',
+                                },
+                                '& .MuiInputLabel-root': {
+                                    color: '#2196f3',
+                                },
+                            }}
+                        />
+                        <TextField
+                            fullWidth
+                            label="Fecha Fin"
+                            type="datetime-local"
+                            value={toDatetimeLocal(formData.fecha_fin)}
+                            onChange={(e) => setFormData({ ...formData, fecha_fin: e.target.value })}
+                            required
+                            margin="normal"
+                            InputLabelProps={{ shrink: true }}
+                            sx={{
+                                '& .MuiOutlinedInput-root': {
+                                    '& fieldset': {
+                                        borderColor: '#2196f3',
+                                    },
+                                    '&:hover fieldset': {
+                                        borderColor: '#1976d2',
+                                    },
+                                    '&.Mui-focused fieldset': {
+                                        borderColor: '#2196f3',
+                                    },
+                                    background: '#e3f2fd',
+                                },
+                                '& .MuiInputLabel-root': {
+                                    color: '#2196f3',
+                                },
+                            }}
+                        />
+                        <FormControl fullWidth margin="normal">
+                            <InputLabel>Mecánico</InputLabel>
+                            <Select
                                 value={formData.mecanico_id}
-                                onChange={(e) => setFormData({...formData, mecanico_id: e.target.value})}
-                                required
+                                onChange={(e) => setFormData({ ...formData, mecanico_id: e.target.value })}
+                                label="Mecánico"
                             >
-                                <option value="">Seleccionar mecánico</option>
-                                {mecanicos.map(mecanico => (
-                                    <option key={mecanico.id} value={mecanico.id}>
-                                        {mecanico.nombre} {mecanico.apellido}
-                                    </option>
+                                <MenuItem value=""><em>Sin asignar</em></MenuItem>
+                                {mecanicos.map((m) => (
+                                    <MenuItem key={m.id} value={m.id}>{m.nombre}</MenuItem>
                                 ))}
-                            </Form.Select>
-                        </Form.Group>
-
-                        <Form.Group className="mb-3">
-                            <Form.Label>Servicio</Form.Label>
-                            <Form.Select
+                            </Select>
+                        </FormControl>
+                        <FormControl fullWidth margin="normal">
+                            <InputLabel>Servicio</InputLabel>
+                            <Select
                                 value={formData.servicio_id}
-                                onChange={(e) => setFormData({...formData, servicio_id: e.target.value})}
+                                onChange={(e) => setFormData({ ...formData, servicio_id: e.target.value })}
+                                label="Servicio"
                             >
-                                <option value="">Seleccionar servicio</option>
-                                {Array.isArray(servicios) && servicios.map(servicio => (
-                                    <option key={servicio.id} value={servicio.id}>
-                                        {servicio.descripcion}
-                                    </option>
+                                <MenuItem value=""><em>Sin asignar</em></MenuItem>
+                                {servicios.map((s) => (
+                                    <MenuItem key={s.id} value={s.id}>{s.nombre}</MenuItem>
                                 ))}
-                            </Form.Select>
-                        </Form.Group>
-
-                        <Form.Group className="mb-3">
-                            <Form.Label>Fecha Inicio</Form.Label>
-                            <Form.Control
-                                type="datetime-local"
-                                value={formData.fecha_inicio}
-                                onChange={(e) => setFormData({...formData, fecha_inicio: e.target.value})}
-                                required
-                            />
-                        </Form.Group>
-
-                        <Form.Group className="mb-3">
-                            <Form.Label>Fecha Fin</Form.Label>
-                            <Form.Control
-                                type="datetime-local"
-                                value={formData.fecha_fin}
-                                onChange={(e) => setFormData({...formData, fecha_fin: e.target.value})}
-                                required
-                            />
-                        </Form.Group>
-
-                        <div className="d-flex justify-content-between">
-                            <Button variant="primary" type="submit">
+                            </Select>
+                        </FormControl>
+                        <DialogActions sx={{
+                            display: 'flex',
+                            justifyContent: 'flex-end',
+                            gap: 2,
+                            mt: 3,
+                            padding: '16px 24px'
+                        }}>
+                            <Button 
+                                onClick={() => setShowModal(false)} 
+                                sx={{
+                                    borderRadius: 1,
+                                    px: 3,
+                                    py: 1,
+                                    fontWeight: 500,
+                                    color: '#6c757d',
+                                    '&:hover': {
+                                        background: '#f8f9fa'
+                                    }
+                                }}
+                            >
+                                Cancelar
+                            </Button>
+                            <Button 
+                                type="submit" 
+                                variant="contained" 
+                                sx={{
+                                    borderRadius: 1,
+                                    px: 3,
+                                    py: 1,
+                                    fontWeight: 500,
+                                    background: '#2196f3',
+                                    boxShadow: '0 2px 4px rgba(33, 150, 243, 0.3)',
+                                    '&:hover': {
+                                        background: '#1976d2',
+                                        boxShadow: '0 4px 8px rgba(33, 150, 243, 0.4)'
+                                    }
+                                }}
+                            >
                                 {selectedEvent ? 'Actualizar' : 'Crear'}
                             </Button>
                             {selectedEvent && (
-                                <Button variant="danger" onClick={handleDelete}>
+                                <Button 
+                                    onClick={handleDelete} 
+                                    sx={{
+                                        borderRadius: 1,
+                                        px: 3,
+                                        py: 1,
+                                        fontWeight: 500,
+                                        color: '#fff',
+                                        background: '#dc3545',
+                                        boxShadow: '0 2px 4px rgba(220, 53, 69, 0.3)',
+                                        '&:hover': {
+                                            background: '#c82333',
+                                            boxShadow: '0 4px 8px rgba(220, 53, 69, 0.4)'
+                                        }
+                                    }}
+                                >
                                     Eliminar
                                 </Button>
                             )}
-                        </div>
-                    </Form>
-                </Modal.Body>
-            </Modal>
+                        </DialogActions>
+                    </form>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };
