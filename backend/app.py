@@ -13,6 +13,7 @@ from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from backend.middleware import setup_cors, handle_preflight
 from datetime import timedelta
+<<<<<<< HEAD
 import logging
 from dotenv import load_dotenv
 from backend.blueprints.auth import auth_bp
@@ -39,6 +40,18 @@ from backend.middleware.query_monitor import QueryMonitor
 
 # Cargar variables de entorno
 load_dotenv()
+=======
+from blueprints.auth import auth_bp
+from blueprints.clientes import bp as clientes_bp
+from blueprints.vehiculos import bp as vehiculos_bp
+from blueprints.servicios import servicios_bp
+from blueprints.mecanicos import mecanicos_bp
+from blueprints.usuarios import usuarios_bp
+from blueprints.configuracion import configuracion_bp
+from blueprints.dashboard import bp as dashboard_bp
+from blueprints.inventario import inventario_bp
+from blueprints.calendario import calendario_bp
+>>>>>>> respaldo-AutoManager-v1.0
 
 def create_app():
     app = Flask(__name__)
@@ -47,9 +60,14 @@ def create_app():
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-key-change-in-production')
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///automanager.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+<<<<<<< HEAD
     app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'dev-jwt-key-change-in-production')
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = int(os.getenv('JWT_ACCESS_TOKEN_EXPIRES', 86400))
     app.config['JWT_REFRESH_TOKEN_EXPIRES'] = int(os.getenv('JWT_REFRESH_TOKEN_EXPIRES', 604800))
+=======
+    app.config['JWT_SECRET_KEY'] = 'tu_clave_secreta_aqui'  # Cambiar en producción
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
+>>>>>>> respaldo-AutoManager-v1.0
     
     # Configuración de sincronización
     app.config['SYNC_INTERVAL'] = int(os.getenv('SYNC_INTERVAL', 300))
@@ -99,6 +117,7 @@ def create_app():
     app.register_blueprint(servicios_bp, url_prefix='/api/servicios')
     app.register_blueprint(mecanicos_bp, url_prefix='/api/mecanicos')
     app.register_blueprint(inventario_bp, url_prefix='/api/inventario')
+<<<<<<< HEAD
     app.register_blueprint(metrics_bp, url_prefix='/api/metrics')
     app.register_blueprint(sync_bp, url_prefix='/api/sync')
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
@@ -117,6 +136,9 @@ def create_app():
         }
     )
     app.register_blueprint(swaggerui_blueprint, url_prefix=swagger_url)
+=======
+    app.register_blueprint(calendario_bp, url_prefix='/api/eventos')
+>>>>>>> respaldo-AutoManager-v1.0
     
     # Ruta de health check
     @app.route('/api/health')
@@ -172,8 +194,13 @@ def create_app():
     
     # Crear tablas si no existen
     with app.app_context():
+<<<<<<< HEAD
         db.create_all()
         app.logger.info("Tablas verificadas correctamente")
+=======
+        # db.create_all()  # Comentamos esta línea para usar migraciones
+        logger.info("Tablas verificadas correctamente")
+>>>>>>> respaldo-AutoManager-v1.0
     
     return app
 

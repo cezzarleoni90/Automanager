@@ -10,208 +10,99 @@ from typing import Dict, Any
 calendario_bp = Blueprint('calendario', __name__)
 
 # Rutas para Eventos
-@calendario_bp.route('/api/eventos', methods=['GET'])
+@calendario_bp.route('/', methods=['GET'])
 @jwt_required()
 def get_eventos():
     try:
-        fecha_inicio = request.args.get('fecha_inicio')
-        fecha_fin = request.args.get('fecha_fin')
-        mecanico_id = request.args.get('mecanico_id')
-        
-        query = Evento.query
-        
-        if fecha_inicio:
-            query = query.filter(Evento.fecha_inicio >= datetime.fromisoformat(fecha_inicio))
-        if fecha_fin:
-            query = query.filter(Evento.fecha_fin <= datetime.fromisoformat(fecha_fin))
-        if mecanico_id:
-            query = query.filter(Evento.mecanico_id == mecanico_id)
-            
-        eventos = query.all()
-        return jsonify([{
-            'id': e.id,
-            'titulo': e.titulo,
-            'descripcion': e.descripcion,
-            'fecha_inicio': e.fecha_inicio.isoformat(),
-            'fecha_fin': e.fecha_fin.isoformat(),
-            'tipo': e.tipo,
-            'estado': e.estado,
-            'mecanico_id': e.mecanico_id,
-            'mecanico': {
-                'id': e.mecanico.id,
-                'nombre': e.mecanico.nombre,
-                'especialidad': e.mecanico.especialidad
-            } if e.mecanico else None,
-            'servicio_id': e.servicio_id,
-            'servicio': {
-                'id': e.servicio.id,
-                'descripcion': e.servicio.descripcion,
-                'estado': e.servicio.estado,
-                'vehiculo': {
-                    'id': e.servicio.vehiculo.id,
-                    'marca': e.servicio.vehiculo.marca,
-                    'modelo': e.servicio.vehiculo.modelo,
-                    'placa': e.servicio.vehiculo.placa,
-                    'cliente': {
-                        'id': e.servicio.vehiculo.cliente.id,
-                        'nombre': e.servicio.vehiculo.cliente.nombre,
-                        'telefono': e.servicio.vehiculo.cliente.telefono
-                    } if e.servicio.vehiculo.cliente else None
-                } if e.servicio.vehiculo else None
-            } if e.servicio else None
-        } for e in eventos]), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@calendario_bp.route('/api/eventos/<int:id>', methods=['GET'])
-@jwt_required()
-def get_evento(id):
-    try:
-        evento = Evento.query.get_or_404(id)
+        eventos = Evento.query.all()
         return jsonify({
-            'id': evento.id,
-            'titulo': evento.titulo,
-            'descripcion': evento.descripcion,
-            'fecha_inicio': evento.fecha_inicio.isoformat(),
-            'fecha_fin': evento.fecha_fin.isoformat(),
-            'tipo': evento.tipo,
-            'estado': evento.estado,
-            'mecanico_id': evento.mecanico_id,
-            'mecanico': {
-                'id': evento.mecanico.id,
-                'nombre': evento.mecanico.nombre,
-                'especialidad': evento.mecanico.especialidad,
-                'telefono': evento.mecanico.telefono,
-                'email': evento.mecanico.email
-            } if evento.mecanico else None,
-            'servicio_id': evento.servicio_id,
-            'servicio': {
-                'id': evento.servicio.id,
-                'descripcion': evento.servicio.descripcion,
-                'estado': evento.servicio.estado,
-                'fecha': evento.servicio.fecha.isoformat(),
-                'vehiculo': {
-                    'id': evento.servicio.vehiculo.id,
-                    'marca': evento.servicio.vehiculo.marca,
-                    'modelo': evento.servicio.vehiculo.modelo,
-                    'placa': evento.servicio.vehiculo.placa,
-                    'cliente': {
-                        'id': evento.servicio.vehiculo.cliente.id,
-                        'nombre': evento.servicio.vehiculo.cliente.nombre,
-                        'telefono': evento.servicio.vehiculo.cliente.telefono,
-                        'email': evento.servicio.vehiculo.cliente.email
-                    } if evento.servicio.vehiculo.cliente else None
-                } if evento.servicio.vehiculo else None,
-                'repuestos': [{
-                    'id': r.id,
-                    'nombre': r.nombre,
-                    'cantidad': r.cantidad,
-                    'precio': r.precio
-                } for r in evento.servicio.repuestos]
-            } if evento.servicio else None
+            'eventos': [{
+                'id': e.id,
+                'title': e.title,
+                'start': e.start.isoformat(),
+                'end': e.end.isoformat(),
+                'descripcion': e.descripcion,
+                'cliente_id': e.cliente_id,
+                'vehiculo_id': e.vehiculo_id,
+                'estado': e.estado,
+                'backgroundColor': e.color,
+                'borderColor': e.color
+            } for e in eventos]
         }), 200
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({'error': str(e)}), 500
 
-@calendario_bp.route('/api/eventos', methods=['POST'])
+@calendario_bp.route('/', methods=['POST'])
 @jwt_required()
 def create_evento():
     try:
         data = request.get_json()
-        
-        # Verificar si el mecánico existe
-        if 'mecanico_id' in data:
-            mecanico = Mecanico.query.get(data['mecanico_id'])
-            if not mecanico:
-                return jsonify({"error": "Mecánico no encontrado"}), 404
-                
-        # Verificar si el servicio existe
-        if 'servicio_id' in data:
-            servicio = Servicio.query.get(data['servicio_id'])
-            if not servicio:
-                return jsonify({"error": "Servicio no encontrado"}), 404
-                
-        # Verificar disponibilidad del mecánico
-        if 'mecanico_id' in data:
-            fecha_inicio = datetime.fromisoformat(data['fecha_inicio'])
-            fecha_fin = datetime.fromisoformat(data['fecha_fin'])
-            
-            eventos_solapados = Evento.query.filter(
-                Evento.mecanico_id == data['mecanico_id'],
-                Evento.fecha_inicio < fecha_fin,
-                Evento.fecha_fin > fecha_inicio
-            ).all()
-            
-            if eventos_solapados:
-                return jsonify({"error": "El mecánico ya tiene eventos programados en ese horario"}), 400
-        
-        nuevo_evento = Evento(
-            titulo=data['titulo'],
-            descripcion=data.get('descripcion'),
-            fecha_inicio=datetime.fromisoformat(data['fecha_inicio']),
-            fecha_fin=datetime.fromisoformat(data['fecha_fin']),
-            tipo=data['tipo'],
-            estado='programado',
-            mecanico_id=data.get('mecanico_id'),
-            servicio_id=data.get('servicio_id')
+        evento = Evento(
+            title=data['title'],
+            start=datetime.fromisoformat(data['start']),
+            end=datetime.fromisoformat(data['end']),
+            descripcion=data.get('descripcion', ''),
+            cliente_id=data.get('cliente_id'),
+            vehiculo_id=data.get('vehiculo_id'),
+            estado=data.get('estado', 'pendiente'),
+            color=data.get('backgroundColor', '#B0E0E6')
         )
-        
-        db.session.add(nuevo_evento)
+        db.session.add(evento)
         db.session.commit()
-        return jsonify({"mensaje": "Evento creado exitosamente", "id": nuevo_evento.id}), 201
+        return jsonify({
+            'mensaje': 'Evento creado exitosamente',
+            'evento': {
+                'id': evento.id,
+                'title': evento.title,
+                'start': evento.start.isoformat(),
+                'end': evento.end.isoformat()
+            }
+        }), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({'error': str(e)}), 400
 
-@calendario_bp.route('/api/eventos/<int:id>', methods=['PUT'])
+@calendario_bp.route('/<int:id>', methods=['PUT'])
 @jwt_required()
 def update_evento(id):
     try:
         evento = Evento.query.get_or_404(id)
         data = request.get_json()
         
-        # Verificar disponibilidad del mecánico si se cambia la fecha o el mecánico
-        if ('fecha_inicio' in data or 'fecha_fin' in data or 'mecanico_id' in data):
-            fecha_inicio = datetime.fromisoformat(data.get('fecha_inicio', evento.fecha_inicio.isoformat()))
-            fecha_fin = datetime.fromisoformat(data.get('fecha_fin', evento.fecha_fin.isoformat()))
-            mecanico_id = data.get('mecanico_id', evento.mecanico_id)
-            
-            eventos_solapados = Evento.query.filter(
-                Evento.id != id,
-                Evento.mecanico_id == mecanico_id,
-                Evento.fecha_inicio < fecha_fin,
-                Evento.fecha_fin > fecha_inicio
-            ).all()
-            
-            if eventos_solapados:
-                return jsonify({"error": "El mecánico ya tiene eventos programados en ese horario"}), 400
-        
-        evento.titulo = data.get('titulo', evento.titulo)
+        evento.title = data.get('title', evento.title)
+        evento.start = datetime.fromisoformat(data['start']) if 'start' in data else evento.start
+        evento.end = datetime.fromisoformat(data['end']) if 'end' in data else evento.end
         evento.descripcion = data.get('descripcion', evento.descripcion)
-        evento.fecha_inicio = datetime.fromisoformat(data['fecha_inicio']) if 'fecha_inicio' in data else evento.fecha_inicio
-        evento.fecha_fin = datetime.fromisoformat(data['fecha_fin']) if 'fecha_fin' in data else evento.fecha_fin
-        evento.tipo = data.get('tipo', evento.tipo)
+        evento.cliente_id = data.get('cliente_id', evento.cliente_id)
+        evento.vehiculo_id = data.get('vehiculo_id', evento.vehiculo_id)
         evento.estado = data.get('estado', evento.estado)
-        evento.mecanico_id = data.get('mecanico_id', evento.mecanico_id)
-        evento.servicio_id = data.get('servicio_id', evento.servicio_id)
+        evento.color = data.get('backgroundColor', evento.color)
         
         db.session.commit()
-        return jsonify({"mensaje": "Evento actualizado exitosamente"}), 200
+        return jsonify({
+            'mensaje': 'Evento actualizado exitosamente',
+            'evento': {
+                'id': evento.id,
+                'title': evento.title,
+                'start': evento.start.isoformat(),
+                'end': evento.end.isoformat()
+            }
+        }), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({'error': str(e)}), 400
 
-@calendario_bp.route('/api/eventos/<int:id>', methods=['DELETE'])
+@calendario_bp.route('/<int:id>', methods=['DELETE'])
 @jwt_required()
 def delete_evento(id):
     try:
         evento = Evento.query.get_or_404(id)
         db.session.delete(evento)
         db.session.commit()
-        return jsonify({"mensaje": "Evento eliminado exitosamente"}), 200
+        return jsonify({'mensaje': 'Evento eliminado exitosamente'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": str(e)}), 500
+        return jsonify({'error': str(e)}), 400
 
 # Rutas para Disponibilidad
 @calendario_bp.route('/api/mecanicos/<int:mecanico_id>/disponibilidad', methods=['GET'])
@@ -254,5 +145,48 @@ def get_disponibilidad_mecanico(mecanico_id):
             'mecanico_id': mecanico_id,
             'slots_disponibles': slots
         }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@calendario_bp.route('/api/eventos/sugerir', methods=['POST'])
+@jwt_required()
+def sugerir_evento():
+    """
+    Sugerir horario y mecánico óptimo para una cita de servicio.
+    """
+    try:
+        data = request.get_json()
+        fecha_inicio = datetime.fromisoformat(data['fecha_inicio'])
+        duracion = int(data['duracion'])  # en minutos
+        fecha_fin = fecha_inicio + timedelta(minutes=duracion)
+        mecanicos = Mecanico.query.all()
+        mejor_opcion = None
+        menor_citas = None
+
+        for mecanico in mecanicos:
+            eventos = Evento.query.filter(
+                Evento.mecanico_id == mecanico.id,
+                Evento.fecha_inicio < fecha_fin,
+                Evento.fecha_fin > fecha_inicio
+            ).all()
+            if not eventos:
+                return jsonify({
+                    "mecanico_id": mecanico.id,
+                    "mecanico_nombre": f"{mecanico.nombre} {mecanico.apellido}",
+                    "color": mecanico.color,
+                    "fecha_inicio": fecha_inicio.isoformat(),
+                    "fecha_fin": fecha_fin.isoformat()
+                }), 200
+            if menor_citas is None or len(eventos) < menor_citas:
+                menor_citas = len(eventos)
+                mejor_opcion = mecanico
+
+        return jsonify({
+            "mecanico_id": mejor_opcion.id,
+            "mecanico_nombre": f"{mejor_opcion.nombre} {mejor_opcion.apellido}",
+            "color": mejor_opcion.color,
+            "mensaje": "Todos los mecánicos tienen eventos, se sugiere el de menor carga."
+        }), 200
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500 

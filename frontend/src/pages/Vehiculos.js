@@ -48,7 +48,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../context/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { getVehiculos, getVehiculo, getClientes, updateVehiculo, createVehiculo, deleteVehiculo } from '../services/api';
+import { getVehiculos, getVehiculo, getClientes, updateVehiculo, createVehiculo, deleteVehiculo, createVehiculoCliente } from '../services/api';
 
 // Agregar la función formatEstadoLabel
 const formatEstadoLabel = (estado) => {
@@ -220,7 +220,7 @@ function Vehiculos() {
 
     try {
       // Validar campos requeridos
-      const camposRequeridos = ['marca', 'modelo', 'año', 'placa', 'cliente_id'];
+      const camposRequeridos = ['marca', 'modelo', 'año', 'placa'];
       const camposFaltantes = camposRequeridos.filter(campo => !vehiculoActual[campo]);
       
       if (camposFaltantes.length > 0) {
@@ -232,7 +232,6 @@ function Vehiculos() {
         ...vehiculoActual,
         año: vehiculoActual.año ? parseInt(vehiculoActual.año) : null,
         kilometraje: vehiculoActual.kilometraje ? parseFloat(vehiculoActual.kilometraje) : null,
-        cliente_id: vehiculoActual.cliente_id || clienteSeleccionado?.id,
         // Convertir strings vacíos a null para campos opcionales
         color: vehiculoActual.color || null,
         tipo_combustible: vehiculoActual.tipo_combustible || null,
@@ -247,7 +246,13 @@ function Vehiculos() {
         await updateVehiculo(vehiculoActual.id, datosVehiculo);
         setSuccess('Vehículo actualizado exitosamente');
       } else {
-        await createVehiculo(datosVehiculo);
+        if (clienteSeleccionado) {
+          // Si hay un cliente seleccionado, usar el endpoint específico
+          await createVehiculoCliente(clienteSeleccionado.id, datosVehiculo);
+        } else {
+          // Si no hay cliente seleccionado, usar el endpoint general
+          await createVehiculo(datosVehiculo);
+        }
         setSuccess('Vehículo creado exitosamente');
       }
       handleCloseDialog();

@@ -70,6 +70,8 @@ import {
   getMecanicos,
   getRepuestos,
 } from '../services/api';
+import '../index.css'; // O la ruta correcta a tu CSS global
+import esLocale from '@fullcalendar/core/locales/es';
 
 function Servicios() {
   const navigate = useNavigate();
@@ -85,13 +87,16 @@ function Servicios() {
   const [success, setSuccess] = useState('');
   const [openDialog, setOpenDialog] = useState(false);
   const servicioVacio = {
-    tipo_servicio: 'diagnostico',
+    tipo_servicio: 'mantenimiento',
     descripcion: '',
     fecha_inicio: new Date().toISOString().split('T')[0],
-    fecha_fin: '',
+    fecha_fin: null,
     estado: 'pendiente',
     vehiculo_id: '',
     mecanico_id: '',
+    titulo: '',
+    costo: 0,
+    notas: ''
   };
   const [servicioActual, setServicioActual] = useState(servicioVacio);
   const [busqueda, setBusqueda] = useState('');
@@ -127,67 +132,39 @@ function Servicios() {
     cargarMecanicos();
     cargarRepuestos();
 
-    // Reiniciar selecciones de repuestos y mecánicos
-    setRepuestoSeleccionado('');
-    setMecanicoSeleccionado('');
-    setCantidadRepuesto(1);
-
     // Manejar la navegación desde el módulo de Vehículos
     const searchParams = new URLSearchParams(location.search);
     const servicioId = searchParams.get('servicio');
     const vehiculoId = location.state?.vehiculoId;
     const vehiculoInfo = location.state?.vehiculoInfo;
 
-    // Variable para almacenar si ya se procesó un servicio específico
-    let procesandoServicio = false;
-
     if (servicioId) {
-      procesandoServicio = true;
       console.log('Detectado servicioId en URL:', servicioId);
-      
-      // Buscar el servicio en los datos cargados
-      const buscarYCargarServicio = async () => {
-        // Intentar encontrar primero en el estado actual
-        let servicio = servicios.find(s => s.id === parseInt(servicioId));
-        
-        // Si no está en el estado, cargarlo directamente
-        if (!servicio) {
-          try {
-            console.log('Servicio no encontrado en estado, cargando desde API');
-            const servicioData = await getServicio(parseInt(servicioId));
-            handleOpenDialog({id: parseInt(servicioId)});
-          } catch (error) {
-            console.error('Error al cargar servicio específico:', error);
-            setError('Error al cargar el servicio solicitado');
-          }
-        } else {
-          console.log('Servicio encontrado en estado, abriendo diálogo');
-        handleOpenDialog(servicio);
-      }
-      };
-      
-      buscarYCargarServicio();
-    } else if (vehiculoId && !procesandoServicio) {
-      // Convertir a String para evitar problemas de comparación
-      const vehiculoIdStr = String(vehiculoId);
-      console.log('🚗 Vehículo seleccionado desde vista de vehículos:', vehiculoIdStr, vehiculoInfo);
+      handleOpenDialog({id: parseInt(servicioId)});
+    } else if (vehiculoId) {
+      console.log('🚗 Vehículo seleccionado desde vista de vehículos:', vehiculoId, vehiculoInfo);
       
       // Encontrar el vehículo completo para tener más información
-      const vehiculoCompleto = vehiculos.find(v => String(v.id) === vehiculoIdStr);
+      const vehiculoCompleto = vehiculos.find(v => String(v.id) === String(vehiculoId));
       
-      setVehiculoSeleccionado({
-        id: vehiculoIdStr,
+      const vehiculoSeleccionadoInfo = {
+        id: String(vehiculoId),
         info: vehiculoInfo || (vehiculoCompleto ? `${vehiculoCompleto.marca} ${vehiculoCompleto.modelo} (${vehiculoCompleto.placa})` : '')
-      });
+      };
       
-      // Actualizar inmediatamente el vehiculo_id en el servicio actual
-      setServicioActual(prev => ({
+      setVehiculoSeleccionado(vehiculoSeleccionadoInfo);
+      
+      // Actualizar el servicio actual con el vehículo seleccionado
+      const servicioInicial = {
         ...servicioVacio,
-        vehiculo_id: vehiculoIdStr
-      }));
+        vehiculo_id: String(vehiculoId),
+        fecha_inicio: new Date().toISOString().split('T')[0],
+        estado: 'pendiente'
+      };
       
-      console.log('Servicio actual actualizado con vehículo ID:', vehiculoIdStr);
-      handleOpenDialog();
+      console.log('Nuevo servicio inicial con vehículo seleccionado:', servicioInicial);
+      setServicioActual(servicioInicial);
+      setOpenDialog(true);
     }
   }, [location.search, location.state]);
 
@@ -317,7 +294,7 @@ function Servicios() {
 
   const handleOpenDialog = async (servicio = null) => {
     try {
-    if (servicio) {
+      if (servicio) {
         console.log('🔄 Cargando detalles completos del servicio:', servicio.id);
         
         // Si ya tenemos el servicio pero solo tenemos el ID, cargarlo completo
@@ -335,36 +312,40 @@ function Servicios() {
         
         // Formatear las fechas antes de establecer en el estado
         const servicioFormateado = {
-          ...servicioVacio, // Valores por defecto para evitar undefined
+          ...servicioVacio,
           ...servicioDetallado,
-          fecha_inicio: formatDate(servicioDetallado.fecha_inicio),
-          fecha_fin: formatDate(servicioDetallado.fecha_fin),
-          // Asegurar que estos campos siempre sean strings no undefined/null
-          vehiculo_id: servicioDetallado.vehiculo_id || 
-                      (servicioDetallado.vehiculo ? servicioDetallado.vehiculo.id : '') || '',
-          mecanico_id: servicioDetallado.mecanico_id || 
-                      (servicioDetallado.mecanico ? servicioDetallado.mecanico.id : '') || ''
+          fecha_inicio: servicioDetallado.fecha_inicio ? 
+            new Date(servicioDetallado.fecha_inicio).toISOString().split('T')[0] : 
+            new Date().toISOString().split('T')[0],
+          fecha_fin: servicioDetallado.fecha_fin ? 
+            new Date(servicioDetallado.fecha_fin).toISOString().split('T')[0] : '',
+          vehiculo_id: String(servicioDetallado.vehiculo_id || 
+                      (servicioDetallado.vehiculo ? servicioDetallado.vehiculo.id : '') || ''),
+          mecanico_id: servicioDetallado.mecanico_id ? String(servicioDetallado.mecanico_id) : ''
         };
         
         console.log('✅ Servicio formateado para edición:', servicioFormateado);
         
-        // Establecer el servicio en ambos estados
         setServicioActual(servicioFormateado);
         setServicioSeleccionado(servicioFormateado);
         setDialogoDetalleAbierto(true);
         setPestanaActiva('detalles');
         
-        // Luego cargar datos adicionales (una sola vez)
         setTimeout(() => {
           cargarRepuestosServicio(servicioDetallado.id);
           cargarHistorial(servicioDetallado.id);
         }, 500);
-    } else {
-      setServicioActual({
+      } else {
+        // Si no hay servicio, inicializar con valores por defecto
+        const servicioInicial = {
           ...servicioVacio,
-        vehiculo_id: vehiculoSeleccionado?.id || '',
-      });
-    setOpenDialog(true);
+          vehiculo_id: vehiculoSeleccionado ? String(vehiculoSeleccionado.id) : '',
+          fecha_inicio: new Date().toISOString().split('T')[0],
+          estado: 'pendiente'
+        };
+        console.log('Nuevo servicio inicial:', servicioInicial);
+        setServicioActual(servicioInicial);
+        setOpenDialog(true);
       }
     } catch (error) {
       console.error('❌ Error al cargar detalles del servicio:', error);
@@ -391,9 +372,9 @@ function Servicios() {
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setServicioActual(prev => ({
+    setServicioActual((prev) => ({
       ...prev,
-      [name]: value || ''
+      [name]: value,
     }));
   };
 
@@ -404,74 +385,65 @@ function Servicios() {
     setSuccess('');
 
     try {
-      // Validar campos obligatorios
-      if (!servicioActual.tipo_servicio) {
-        throw new Error('El tipo de servicio es obligatorio');
-      }
-      
-      // Verificar si tenemos un vehículo seleccionado
-      const vehiculo_id = servicioActual.vehiculo_id || vehiculoSeleccionado?.id;
-      
-      if (!vehiculo_id) {
-        throw new Error('Debe seleccionar un vehículo para el servicio');
+      // Validar campos requeridos
+      if (!servicioActual.descripcion) {
+        setError('La descripción del servicio es requerida');
+        setLoading(false);
+        return;
       }
 
-      // Formatear fechas
-      const fechaInicio = servicioActual.fecha_inicio 
-        ? servicioActual.fecha_inicio.includes('T') 
-          ? servicioActual.fecha_inicio 
-          : `${servicioActual.fecha_inicio}T00:00:00.000Z`
-      : new Date().toISOString();
-      
-      const fechaFin = servicioActual.fecha_fin 
-        ? servicioActual.fecha_fin.includes('T') 
-          ? servicioActual.fecha_fin 
-          : `${servicioActual.fecha_fin}T23:59:59.999Z`
-      : null;
-      
-      // Capturar el estado actual para comparar después
-      const estadoAnterior = servicioActual.estado;
-      
-      // Formatear los datos para la API
-      const servicioData = {
-        ...servicioActual,
-        fecha_inicio: fechaInicio,
-        fecha_fin: fechaFin,
-        vehiculo_id: parseInt(vehiculo_id),
-        mecanico_id: servicioActual.mecanico_id ? parseInt(servicioActual.mecanico_id) : null,
-        comentario: servicioActual.estado !== estadoAnterior ? 
-          `Estado cambiado de ${estadoAnterior} a ${servicioActual.estado} desde formulario de edición` : undefined
+      // Validar que tengamos un vehículo
+      const vehiculoId = vehiculoSeleccionado ? vehiculoSeleccionado.id : servicioActual.vehiculo_id;
+      if (!vehiculoId) {
+        setError('Debe seleccionar un vehículo');
+        setLoading(false);
+        return;
+      }
+
+      // Obtener el token JWT
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError('No se encontró el token de autenticación. Por favor, inicie sesión nuevamente.');
+        setLoading(false);
+        return;
+      }
+
+      // Preparar los datos para enviar al backend
+      const datosServicio = {
+        tipo_servicio: servicioActual.tipo_servicio || 'mantenimiento', // Valor por defecto si es undefined
+        descripcion: servicioActual.descripcion,
+        titulo: servicioActual.descripcion.substring(0, 100),
+        vehiculo_id: Number(vehiculoId),
+        mecanico_id: servicioActual.mecanico_id ? Number(servicioActual.mecanico_id) : null,
+        fecha_inicio: servicioActual.fecha_inicio || new Date().toISOString().split('T')[0],
+        fecha_fin: servicioActual.fecha_fin || undefined,
+        estado: servicioActual.estado || 'pendiente',
+        costo: servicioActual.costo || 0,
+        notas: servicioActual.notas || '',
+        prioridad: 'normal',
+        fecha_creacion: new Date().toISOString().split('T')[0]
       };
 
-      let resultado;
-      
+      // Asegurarnos de que fecha_fin sea undefined si está vacía o es null
+      if (!datosServicio.fecha_fin || datosServicio.fecha_fin === '') {
+        delete datosServicio.fecha_fin;
+      }
+
+      console.log('Enviando datos del servicio:', datosServicio);
+
+      // Usar la función updateServicio del servicio API
       if (servicioActual.id) {
-        // Actualizar servicio existente
-        resultado = await updateServicio(servicioActual.id, servicioData);
-        
-        // Si hay un cambio de estado, registrar en el historial
-        if (estadoAnterior !== servicioActual.estado) {
-          await cambiarEstado(servicioActual.id, {
-            estado: servicioActual.estado,
-            comentario: `Cambio de estado desde edición: ${estadoAnterior} → ${servicioActual.estado}`
-          });
-        }
+        await updateServicio(servicioActual.id, datosServicio);
       } else {
-        // Crear nuevo servicio
-        resultado = await createServicio(servicioData);
+        await createServicio(datosServicio);
       }
 
       setSuccess(`Servicio ${servicioActual.id ? 'actualizado' : 'creado'} exitosamente`);
-      
-      // Recargar datos
-      await cargarServicios();
-      
-      // Cerrar el diálogo
       handleCloseDialog();
-      
+      cargarServicios();
     } catch (error) {
       console.error('Error al guardar servicio:', error);
-      setError(error.message || error.response?.data?.error || 'Error al guardar el servicio');
+      setError(error.message || 'Error al guardar el servicio');
     } finally {
       setLoading(false);
     }
@@ -802,8 +774,17 @@ function Servicios() {
 
   const formatDate = (isoDate) => {
     if (!isoDate) return '';
-    const date = new Date(isoDate);
-    return date.toISOString().split('T')[0];
+    try {
+      const date = new Date(isoDate);
+      if (isNaN(date.getTime())) {
+        console.error('Fecha inválida:', isoDate);
+        return '';
+      }
+      return date.toISOString().split('T')[0];
+    } catch (error) {
+      console.error('Error al formatear fecha:', error);
+      return '';
+    }
   };
 
   const formatEstadoLabel = (estado) => {
@@ -846,6 +827,49 @@ function Servicios() {
     // Cargar datos adicionales para este servicio
     cargarRepuestosServicio(servicio.id);
     cargarHistorial(servicio.id);
+  };
+
+  const handleEdit = (servicio) => {
+    console.log('Editando servicio:', servicio);
+    setServicioActual({
+      ...servicio,
+      fecha_inicio: formatDate(servicio.fecha_inicio),
+      fecha_fin: formatDate(servicio.fecha_fin),
+      fecha_creacion: formatDate(servicio.fecha_creacion)
+    });
+    setVehiculoSeleccionado(vehiculos.find(v => v.id === servicio.vehiculo_id) || null);
+    setOpenDialog(true);
+  };
+
+  const handleDateChange = (field, value) => {
+    console.log(`Cambiando fecha ${field}:`, value);
+    
+    // Si el campo es fecha_fin y está vacío, establecer como string vacío
+    if (field === 'fecha_fin' && (!value || value.trim() === '')) {
+      setServicioActual(prev => ({
+        ...prev,
+        [field]: ''
+      }));
+      return;
+    }
+
+    try {
+      const date = new Date(value);
+      if (isNaN(date.getTime())) {
+        console.error('Fecha inválida:', value);
+        return;
+      }
+      
+      // Formatear la fecha como YYYY-MM-DD
+      const formattedDate = date.toISOString().split('T')[0];
+      
+      setServicioActual(prev => ({
+        ...prev,
+        [field]: formattedDate
+      }));
+    } catch (error) {
+      console.error('Error al cambiar fecha:', error);
+    }
   };
 
   return (
@@ -1227,9 +1251,10 @@ function Servicios() {
           {pestanaActiva === 'detalles' && servicioSeleccionado && (
             <Box sx={{ p: 3 }}>
               <Grid container spacing={3}>
+                {/* Información General */}
                 <Grid item xs={12} md={6}>
-                  <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight="bold">
+                  <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+                    <Typography variant="subtitle1" gutterBottom fontWeight="bold" color="primary">
                       Información General
                     </Typography>
                     <Box sx={{ mt: 2 }}>
@@ -1238,216 +1263,173 @@ function Servicios() {
                           <Typography variant="body2" color="text.secondary">Tipo:</Typography>
                         </Grid>
                         <Grid item xs={8}>
-                          <Typography variant="body2">{servicioSeleccionado.tipo_servicio}</Typography>
+                          <Chip 
+                            label={servicioSeleccionado.tipo_servicio} 
+                            color="primary" 
+                            size="small"
+                            sx={{ textTransform: 'capitalize' }}
+                          />
                         </Grid>
                         
                         <Grid item xs={4}>
                           <Typography variant="body2" color="text.secondary">Estado:</Typography>
                         </Grid>
                         <Grid item xs={8}>
-                          <Chip
+                          <Chip 
                             label={formatEstadoLabel(servicioSeleccionado.estado)}
                             color={
                               servicioSeleccionado.estado === 'completado' ? 'success' :
-                              servicioSeleccionado.estado === 'en_progreso' ? 'warning' :
-                              servicioSeleccionado.estado === 'diagnostico' ? 'info' :
-                              servicioSeleccionado.estado === 'cancelado' ? 'error' : 
-                              'primary'
+                              servicioSeleccionado.estado === 'cancelado' ? 'error' :
+                              servicioSeleccionado.estado === 'en_progreso' ? 'primary' :
+                              servicioSeleccionado.estado === 'pausado' ? 'warning' :
+                              'default'
                             }
                             size="small"
-                            sx={{ 
-                              fontWeight: 'medium',
-                              '&.MuiChip-colorSuccess': {
-                                bgcolor: '#4CAF50',
-                                color: 'white'
-                              },
-                              '&.MuiChip-colorWarning': {
-                                bgcolor: '#FF9800',
-                                color: 'white'
-                              },
-                              '&.MuiChip-colorInfo': {
-                                bgcolor: '#2196F3',
-                                color: 'white'
-                              },
-                              '&.MuiChip-colorSecondary': {
-                                bgcolor: '#9C27B0',
-                                color: 'white'
-                              },
-                              '&.MuiChip-colorError': {
-                                bgcolor: '#F44336',
-                                color: 'white'
-                              },
-                              '&.MuiChip-colorPrimary': {
-                                bgcolor: '#3F51B5',
-                                color: 'white'
-                              }
-                            }}
                           />
                         </Grid>
-                        
+
                         <Grid item xs={4}>
-                          <Typography variant="body2" color="text.secondary">Fecha de inicio:</Typography>
+                          <Typography variant="body2" color="text.secondary">Fecha Inicio:</Typography>
                         </Grid>
                         <Grid item xs={8}>
                           <Typography variant="body2">
-                            {servicioSeleccionado.fecha_inicio ? new Date(servicioSeleccionado.fecha_inicio).toLocaleDateString() : 'No disponible'}
+                            {formatDateTime(servicioSeleccionado.fecha_inicio)}
                           </Typography>
                         </Grid>
-                        
-                        {servicioSeleccionado.fecha_fin && (
-                          <>
-                            <Grid item xs={4}>
-                              <Typography variant="body2" color="text.secondary">Fecha de fin:</Typography>
-                            </Grid>
-                            <Grid item xs={8}>
-                              <Typography variant="body2">
-                                {new Date(servicioSeleccionado.fecha_fin).toLocaleDateString()}
-                              </Typography>
-                            </Grid>
-                          </>
-                        )}
+
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Fecha Fin:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {servicioSeleccionado.fecha_fin ? formatDateTime(servicioSeleccionado.fecha_fin) : 'Pendiente'}
+                          </Typography>
+                        </Grid>
+
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Costo:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2" fontWeight="bold" color="primary">
+                            ${servicioSeleccionado.costo?.toLocaleString('es-CO') || '0'}
+                          </Typography>
+                        </Grid>
                       </Grid>
                     </Box>
                   </Paper>
                 </Grid>
-                
+
+                {/* Información del Vehículo */}
                 <Grid item xs={12} md={6}>
-                  <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-                      Vehículo y Cliente
+                  <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+                    <Typography variant="subtitle1" gutterBottom fontWeight="bold" color="primary">
+                      Información del Vehículo
                     </Typography>
-                    {servicioSeleccionado.vehiculo ? (
-                      <Box sx={{ mt: 2 }}>
-                        <Grid container spacing={2}>
-                          <Grid item xs={4}>
-                            <Typography variant="body2" color="text.secondary">Vehículo:</Typography>
-                          </Grid>
-                          <Grid item xs={8}>
-                            <Typography variant="body2">
-                              {servicioSeleccionado.vehiculo.marca} {servicioSeleccionado.vehiculo.modelo}
-                            </Typography>
-                          </Grid>
-                          
-                          <Grid item xs={4}>
-                            <Typography variant="body2" color="text.secondary">Placa:</Typography>
-                          </Grid>
-                          <Grid item xs={8}>
-                            <Typography variant="body2">{servicioSeleccionado.vehiculo.placa}</Typography>
-                          </Grid>
-                          
-                          <Grid item xs={4}>
-                            <Typography variant="body2" color="text.secondary">Año:</Typography>
-                          </Grid>
-                          <Grid item xs={8}>
-                            <Typography variant="body2">{servicioSeleccionado.vehiculo.año || 'No disponible'}</Typography>
-                          </Grid>
-                          
-                          {servicioSeleccionado.cliente && (
-                            <>
-                              <Grid item xs={4}>
-                                <Typography variant="body2" color="text.secondary">Cliente:</Typography>
-                              </Grid>
-                              <Grid item xs={8}>
-                                <Typography variant="body2">
-                                  {servicioSeleccionado.cliente.nombre} {servicioSeleccionado.cliente.apellido}
-                                </Typography>
-                              </Grid>
-                              
-                              <Grid item xs={4}>
-                                <Typography variant="body2" color="text.secondary">Teléfono:</Typography>
-                              </Grid>
-                              <Grid item xs={8}>
-                                <Typography variant="body2">{servicioSeleccionado.cliente.telefono || 'No disponible'}</Typography>
-                              </Grid>
-                            </>
-                          )}
-                        </Grid>
-                      </Box>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        No hay información del vehículo disponible
-                      </Typography>
-                    )}
-                  </Paper>
-                </Grid>
-                
-                <Grid item xs={12}>
-                  <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-                      Descripción del Servicio
-                    </Typography>
-                    <Typography variant="body2" sx={{ mt: 1 }}>
-                      {servicioSeleccionado.descripcion || 'No hay descripción disponible'}
-                    </Typography>
-                  </Paper>
-                </Grid>
-                
-                <Grid item xs={12} md={6}>
-                  <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-                      Mecánico Asignado
-                    </Typography>
-                    {servicioSeleccionado.mecanico_id && mecanicos.find(m => m.id === Number(servicioSeleccionado.mecanico_id)) ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
-                        <PersonIcon color="primary" />
-                        <Box sx={{ ml: 2 }}>
-                          <Typography>
-                            {mecanicos.find(m => m.id === Number(servicioSeleccionado.mecanico_id))?.nombre} {' '}
-                            {mecanicos.find(m => m.id === Number(servicioSeleccionado.mecanico_id))?.apellido}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {mecanicos.find(m => m.id === Number(servicioSeleccionado.mecanico_id))?.especialidad}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                        No hay mecánico asignado a este servicio
-                      </Typography>
-                    )}
-                  </Paper>
-                </Grid>
-                
-                <Grid item xs={12} md={6}>
-                  <Paper variant="outlined" sx={{ p: 2 }}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight="bold">
-                      Datos Adicionales
-                    </Typography>
-                    <Box sx={{ mt: 1 }}>
+                    <Box sx={{ mt: 2 }}>
                       <Grid container spacing={2}>
-                        {servicioSeleccionado.kilometraje_entrada && (
-                          <>
-                            <Grid item xs={6}>
-                              <Typography variant="body2" color="text.secondary">Kilometraje:</Typography>
-                            </Grid>
-                            <Grid item xs={6}>
-                              <Typography variant="body2">{servicioSeleccionado.kilometraje_entrada} km</Typography>
-                            </Grid>
-                          </>
-                        )}
-                        
-                        {servicioSeleccionado.costo_estimado > 0 && (
-                          <>
-                            <Grid item xs={6}>
-                              <Typography variant="body2" color="text.secondary">Costo estimado:</Typography>
-                            </Grid>
-                            <Grid item xs={6}>
-                              <Typography variant="body2">${servicioSeleccionado.costo_estimado.toFixed(2)}</Typography>
-                            </Grid>
-                          </>
-                        )}
-                        
-                        {servicioSeleccionado.costo_real > 0 && (
-                          <>
-                            <Grid item xs={6}>
-                              <Typography variant="body2" color="text.secondary">Costo real:</Typography>
-                            </Grid>
-                            <Grid item xs={6}>
-                              <Typography variant="body2">${servicioSeleccionado.costo_real.toFixed(2)}</Typography>
-                            </Grid>
-                          </>
-                        )}
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Placa:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2" fontWeight="bold">
+                            {servicioSeleccionado.vehiculo?.placa || 'No asignado'}
+                          </Typography>
+                        </Grid>
+
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Marca:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {servicioSeleccionado.vehiculo?.marca || 'No asignado'}
+                          </Typography>
+                        </Grid>
+
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Modelo:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {servicioSeleccionado.vehiculo?.modelo || 'No asignado'}
+                          </Typography>
+                        </Grid>
+
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Cliente:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {servicioSeleccionado.cliente ? 
+                              `${servicioSeleccionado.cliente.nombre} ${servicioSeleccionado.cliente.apellido}` : 
+                              'No asignado'}
+                          </Typography>
+                        </Grid>
                       </Grid>
+                    </Box>
+                  </Paper>
+                </Grid>
+
+                {/* Información del Mecánico */}
+                <Grid item xs={12} md={6}>
+                  <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+                    <Typography variant="subtitle1" gutterBottom fontWeight="bold" color="primary">
+                      Información del Mecánico
+                    </Typography>
+                    <Box sx={{ mt: 2 }}>
+                      <Grid container spacing={2}>
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Nombre:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {servicioSeleccionado.mecanico ? 
+                              `${servicioSeleccionado.mecanico.nombre} ${servicioSeleccionado.mecanico.apellido}` : 
+                              'No asignado'}
+                          </Typography>
+                        </Grid>
+
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Especialidad:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {servicioSeleccionado.mecanico?.especialidad || 'No asignado'}
+                          </Typography>
+                        </Grid>
+
+                        <Grid item xs={4}>
+                          <Typography variant="body2" color="text.secondary">Contacto:</Typography>
+                        </Grid>
+                        <Grid item xs={8}>
+                          <Typography variant="body2">
+                            {servicioSeleccionado.mecanico?.telefono || 'No disponible'}
+                          </Typography>
+                        </Grid>
+                      </Grid>
+                    </Box>
+                  </Paper>
+                </Grid>
+
+                {/* Descripción y Notas */}
+                <Grid item xs={12} md={6}>
+                  <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
+                    <Typography variant="subtitle1" gutterBottom fontWeight="bold" color="primary">
+                      Descripción y Notas
+                    </Typography>
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        Descripción:
+                      </Typography>
+                      <Typography variant="body2" sx={{ mb: 2 }}>
+                        {servicioSeleccionado.descripcion || 'Sin descripción'}
+                      </Typography>
+
+                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                        Notas Adicionales:
+                      </Typography>
+                      <Typography variant="body2">
+                        {servicioSeleccionado.notas || 'Sin notas adicionales'}
+                      </Typography>
                     </Box>
                   </Paper>
                 </Grid>
@@ -1855,20 +1837,20 @@ function Servicios() {
         <DialogContent>
           <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
             <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <FormControl fullWidth required>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
                   <InputLabel>Tipo de Servicio</InputLabel>
                   <Select
                     name="tipo_servicio"
-                    value={servicioActual.tipo_servicio}
+                    value={servicioActual.tipo_servicio || 'mantenimiento'}
                     onChange={handleInputChange}
                     label="Tipo de Servicio"
+                    required
                   >
-                    {tiposServicio.map((tipo) => (
-                      <MenuItem key={tipo.value} value={tipo.value}>
-                        {tipo.label}
-                      </MenuItem>
-                    ))}
+                    <MenuItem value="mantenimiento">Mantenimiento</MenuItem>
+                    <MenuItem value="reparacion">Reparación</MenuItem>
+                    <MenuItem value="diagnostico">Diagnóstico</MenuItem>
+                    <MenuItem value="revision">Revisión</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -1877,33 +1859,33 @@ function Servicios() {
                   fullWidth
                   label="Descripción"
                   name="descripcion"
-                  value={servicioActual.descripcion}
+                  value={servicioActual.descripcion || ''}
                   onChange={handleInputChange}
                   multiline
                   rows={3}
                   required
+                  error={!servicioActual.descripcion && servicioActual.descripcion !== ''}
+                  helperText={!servicioActual.descripcion && servicioActual.descripcion !== '' ? 'La descripción es requerida' : ''}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   label="Fecha de Inicio"
-                  name="fecha_inicio"
                   type="date"
-                  value={servicioActual.fecha_inicio ? formatDate(servicioActual.fecha_inicio) : ''}
-                  onChange={handleInputChange}
-                  required
+                  value={servicioActual.fecha_inicio || ''}
+                  onChange={(e) => handleDateChange('fecha_inicio', e.target.value)}
                   InputLabelProps={{ shrink: true }}
+                  required
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Fecha de Fin"
-                  name="fecha_fin"
+                  label="Fecha de Finalización"
                   type="date"
-                  value={servicioActual.fecha_fin ? formatDate(servicioActual.fecha_fin) : ''}
-                  onChange={handleInputChange}
+                  value={servicioActual.fecha_fin || ''}
+                  onChange={(e) => handleDateChange('fecha_fin', e.target.value)}
                   InputLabelProps={{ shrink: true }}
                 />
               </Grid>
@@ -1947,8 +1929,15 @@ function Servicios() {
                   <InputLabel>Vehículo</InputLabel>
                   <Select
                     name="vehiculo_id"
-                    value={servicioActual.vehiculo_id || vehiculoSeleccionado?.id || ''}
-                    onChange={handleInputChange}
+                    value={vehiculoSeleccionado ? String(vehiculoSeleccionado.id) : (servicioActual.vehiculo_id || '')}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      console.log('Vehículo seleccionado:', value);
+                      setServicioActual(prev => ({
+                        ...prev,
+                        vehiculo_id: value
+                      }));
+                    }}
                     label="Vehículo"
                     disabled={!!vehiculoSeleccionado}
                   >
