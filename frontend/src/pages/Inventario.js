@@ -47,6 +47,7 @@ import {
   Autorenew as AutoGenerateIcon,
   Visibility as VisibilityIcon,
   Close as CloseIcon,
+  Business as BusinessIcon,
 } from '@mui/icons-material';
 
 function Inventario() {
@@ -74,6 +75,10 @@ function Inventario() {
     tipo: 'entrada',
     cantidad: 1,
     notas: '',
+    precio_unitario: 0,
+    proveedor: '',
+    motivo: '',
+    fecha_movimiento: new Date().toISOString().split('T')[0]
   });
 
   // Estado para categorías
@@ -121,8 +126,39 @@ function Inventario() {
   const [virtualPage, setVirtualPage] = useState(0);
   const virtualRowsPerPage = 10;
   const [isScanningInSelector, setIsScanningInSelector] = useState(false);
+  const [scannerError, setScannerError] = useState('');
   const selectorVideoRef = useRef(null);
   const selectorCanvasRef = useRef(null);
+  const scannerTimeoutRef = useRef(null);
+  const [isLoadingMovimientos, setIsLoadingMovimientos] = useState(false);
+  const [movimientoError, setMovimientoError] = useState('');
+  const [movimientoSuccess, setMovimientoSuccess] = useState('');
+  const [showMovimientoPreview, setShowMovimientoPreview] = useState(false);
+  const [proveedores, setProveedores] = useState([]);
+  const [motivos, setMotivos] = useState([
+    'Compra',
+    'Venta',
+    'Ajuste de Inventario',
+    'Devolución',
+    'Pérdida',
+    'Transferencia',
+    'Otro'
+  ]);
+
+  const [openProveedoresDialog, setOpenProveedoresDialog] = useState(false);
+  const [proveedorActual, setProveedorActual] = useState({
+    nombre: '',
+    contacto: '',
+    telefono: '',
+    email: '',
+    direccion: '',
+    notas: ''
+  });
+  const [isLoadingProveedores, setIsLoadingProveedores] = useState(false);
+  const [proveedorError, setProveedorError] = useState('');
+  const [proveedorSuccess, setProveedorSuccess] = useState('');
+  const [searchProveedor, setSearchProveedor] = useState('');
+  const [sortProveedorConfig, setSortProveedorConfig] = useState({ key: 'nombre', direction: 'asc' });
 
   const cargarRepuestos = async () => {
     try {
@@ -423,6 +459,10 @@ function Inventario() {
       tipo: 'entrada',
       cantidad: 1,
       notas: '',
+      precio_unitario: 0,
+      proveedor: '',
+      motivo: '',
+      fecha_movimiento: new Date().toISOString().split('T')[0]
     });
     setOpenMovimientoDialog(true);
   };
@@ -473,10 +513,49 @@ function Inventario() {
 
   const handleMovimientoInputChange = (e) => {
     const { name, value } = e.target;
-    setMovimientoActual((prev) => ({
+    
+    // Validaciones específicas por campo
+    switch (name) {
+      case 'cantidad':
+        const cantidad = parseInt(value);
+        if (cantidad <= 0) {
+          setMovimientoError('La cantidad debe ser mayor a 0');
+          return;
+        }
+        if (movimientoActual.tipo === 'salida' && cantidad > selectedRepuesto.stock) {
+          setMovimientoError(`No hay suficiente stock. Stock actual: ${selectedRepuesto.stock}`);
+          return;
+        }
+        break;
+      
+      case 'precio_unitario':
+        const precio = parseFloat(value);
+        if (precio < 0) {
+          setMovimientoError('El precio no puede ser negativo');
+          return;
+        }
+        break;
+
+      case 'fecha_movimiento':
+        const fecha = new Date(value);
+        if (fecha > new Date()) {
+          setMovimientoError('La fecha no puede ser futura');
+          return;
+        }
+        break;
+    }
+
+    setMovimientoActual(prev => ({
       ...prev,
-      [name]: value,
+      [name]: value
     }));
+    setMovimientoError('');
+  };
+
+  const calcularTotal = () => {
+    const cantidad = parseFloat(movimientoActual.cantidad) || 0;
+    const precio = parseFloat(movimientoActual.precio_unitario) || 0;
+    return (cantidad * precio).toFixed(2);
   };
 
   const handleSubmit = async (e) => {
@@ -563,34 +642,77 @@ function Inventario() {
 
   const handleMovimientoSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-    setSuccess('');
+    setMovimientoError('');
+    setMovimientoSuccess('');
+    setIsLoadingMovimientos(true);
 
     try {
+      // Validaciones completas
+      if (!selectedRepuesto) {
+        throw new Error('No se ha seleccionado un repuesto');
+      }
+
+      if (!movimientoActual.cantidad || movimientoActual.cantidad <= 0) {
+        throw new Error('La cantidad debe ser mayor a 0');
+      }
+
+      if (movimientoActual.tipo === 'salida' && movimientoActual.cantidad > selectedRepuesto.stock) {
+        throw new Error(`No hay suficiente stock. Stock actual: ${selectedRepuesto.stock}`);
+      }
+
+      if (!movimientoActual.motivo) {
+        throw new Error('Debe especificar el motivo del movimiento');
+      }
+
+      if (movimientoActual.tipo === 'entrada' && !movimientoActual.precio_unitario) {
+        throw new Error('Debe especificar el precio unitario para entradas');
+      }
+
+      const movimientoData = {
+        ...movimientoActual,
+        repuesto_id: selectedRepuesto.id,
+        fecha: movimientoActual.fecha_movimiento,
+        total: calcularTotal(),
+        usuario_id: localStorage.getItem('userId') // Asumiendo que tienes el ID del usuario en localStorage
+      };
+
       const response = await fetch('http://localhost:5000/api/inventario/movimientos', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
-        body: JSON.stringify({
-          ...movimientoActual,
-          repuesto_id: repuestoActual.id,
-        }),
+        body: JSON.stringify(movimientoData),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error('Error al registrar el movimiento');
+        throw new Error(data.error || 'Error al registrar el movimiento');
       }
 
-      setSuccess('Movimiento registrado exitosamente');
-      handleCloseMovimientoDialog();
-      cargarRepuestos();
+      setMovimientoSuccess('Movimiento registrado exitosamente');
+      
+      // Limpiar formulario
+      setMovimientoActual({
+        tipo: 'entrada',
+        cantidad: 1,
+        notas: '',
+        precio_unitario: 0,
+        proveedor: '',
+        motivo: '',
+        fecha_movimiento: new Date().toISOString().split('T')[0]
+      });
+
+      // Recargar datos
+      await cargarHistorialMovimientos(selectedRepuesto.id);
+      await cargarRepuestos();
+
     } catch (error) {
-      setError(error.message);
+      console.error('Error en handleMovimientoSubmit:', error);
+      setMovimientoError(error.message || 'Error al registrar el movimiento');
     } finally {
-      setLoading(false);
+      setIsLoadingMovimientos(false);
     }
   };
 
@@ -674,6 +796,9 @@ function Inventario() {
   // Función para cargar el historial de movimientos
   const cargarHistorialMovimientos = async (repuestoId) => {
     try {
+      setIsLoadingMovimientos(true);
+      setMovimientoError('');
+      
       const response = await fetch(`http://localhost:5000/api/inventario/movimientos/${repuestoId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -681,14 +806,24 @@ function Inventario() {
       });
 
       if (!response.ok) {
-        throw new Error('Error al cargar el historial de movimientos');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error al cargar el historial de movimientos');
       }
 
       const data = await response.json();
-      setHistorialMovimientos(data.movimientos || []);
+      
+      // Ordenar movimientos por fecha (más recientes primero)
+      const movimientosOrdenados = (data.movimientos || []).sort((a, b) => 
+        new Date(b.fecha) - new Date(a.fecha)
+      );
+      
+      setHistorialMovimientos(movimientosOrdenados);
     } catch (error) {
       console.error('Error al cargar historial:', error);
-      setError('Error al cargar el historial de movimientos');
+      setMovimientoError(error.message || 'Error al cargar el historial de movimientos');
+      setHistorialMovimientos([]);
+    } finally {
+      setIsLoadingMovimientos(false);
     }
   };
 
@@ -696,11 +831,20 @@ function Inventario() {
     setShowRepuestoSelector(true);
   };
 
-  const handleSelectRepuestoForStock = (repuesto) => {
-    setSelectedRepuesto(repuesto);
-    setShowRepuestoSelector(false);
-    setOpenStockDialog(true);
-    cargarHistorialMovimientos(repuesto.id);
+  const handleSelectRepuestoForStock = async (repuesto) => {
+    try {
+      setSelectedRepuesto(repuesto);
+      setShowRepuestoSelector(false);
+      setOpenStockDialog(true);
+      setMovimientoError('');
+      setMovimientoSuccess('');
+      
+      // Cargar historial de movimientos
+      await cargarHistorialMovimientos(repuesto.id);
+    } catch (error) {
+      console.error('Error al seleccionar repuesto:', error);
+      setMovimientoError('Error al cargar los datos del repuesto');
+    }
   };
 
   const handleCloseStockDialog = () => {
@@ -765,52 +909,149 @@ function Inventario() {
     setVirtualPage(newPage);
   };
 
+  // Función para detectar el tipo de dispositivo y escáner
+  const detectScannerType = async () => {
+    try {
+      // Verificar si es un dispositivo móvil
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      // Verificar si hay una cámara disponible
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasCamera = devices.some(device => device.kind === 'videoinput');
+      
+      return {
+        isMobile,
+        hasCamera,
+        isQuaggaSupported: typeof Quagga !== 'undefined'
+      };
+    } catch (error) {
+      console.error('Error al detectar dispositivo:', error);
+      return {
+        isMobile: false,
+        hasCamera: false,
+        isQuaggaSupported: false
+      };
+    }
+  };
+
+  // Función para manejar la entrada de código de barras
+  const handleBarcodeInput = (code) => {
+    console.log('Código detectado:', code);
+    setSearchTerm(code);
+    if (isScanningInSelector) {
+      stopScannerInSelector();
+    }
+  };
+
   // Función para iniciar el escáner en el selector
   const startScannerInSelector = async () => {
     setIsScanningInSelector(true);
+    setScannerError('');
     
     try {
-      const Quagga = (await import('quagga')).default;
+      const deviceInfo = await detectScannerType();
       
-      Quagga.init({
+      if (!deviceInfo.hasCamera) {
+        throw new Error('No se detectó ninguna cámara en el dispositivo');
+      }
+
+      // Configuración base para Quagga
+      const config = {
         inputStream: {
           name: "Live",
           type: "LiveStream",
           target: selectorVideoRef.current,
           constraints: {
-            width: 640,
-            height: 480,
-            facingMode: "environment"
+            width: { min: 640 },
+            height: { min: 480 },
+            facingMode: deviceInfo.isMobile ? "environment" : "user",
+            aspectRatio: { min: 1, max: 2 }
           }
         },
         locator: {
           patchSize: "medium",
           halfSample: true
         },
-        numOfWorkers: 2,
+        numOfWorkers: navigator.hardwareConcurrency || 2,
+        frequency: 10,
         decoder: {
-          readers: ["code_128_reader", "ean_reader", "ean_8_reader", "code_39_reader", "upc_reader", "upc_e_reader"]
+          readers: [
+            "code_128_reader",
+            "ean_reader",
+            "ean_8_reader",
+            "code_39_reader",
+            "upc_reader",
+            "upc_e_reader",
+            "codabar_reader",
+            "i2of5_reader"
+          ],
+          multiple: false
         },
         locate: true
-      }, (err) => {
-        if (err) {
-          console.error(err);
-          setError('Error al inicializar el escáner');
-          setIsScanningInSelector(false);
-          return;
-        }
-        Quagga.start();
-      });
+      };
 
-      Quagga.onDetected((result) => {
-        const code = result.codeResult.code;
-        console.log('Código detectado en selector:', code);
-        setSearchTerm(code);
-        stopScannerInSelector();
-      });
+      // Intentar inicializar Quagga
+      try {
+        const Quagga = (await import('quagga')).default;
+        
+        Quagga.init(config, (err) => {
+          if (err) {
+            console.error('Error al inicializar Quagga:', err);
+            // Si Quagga falla, intentar con la API nativa
+            startNativeScanner();
+            return;
+          }
+          
+          Quagga.start();
+          
+          // Configurar timeout para detener el escáner después de 30 segundos
+          scannerTimeoutRef.current = setTimeout(() => {
+            stopScannerInSelector();
+            setScannerError('Tiempo de escaneo agotado');
+          }, 30000);
 
+          Quagga.onDetected((result) => {
+            if (result && result.codeResult) {
+              handleBarcodeInput(result.codeResult.code);
+            }
+          });
+        });
+      } catch (quaggaError) {
+        console.error('Error al cargar Quagga:', quaggaError);
+        // Si Quagga no está disponible, usar la API nativa
+        startNativeScanner();
+      }
     } catch (error) {
-      setError('Error al cargar el escáner');
+      console.error('Error en startScannerInSelector:', error);
+      setScannerError(error.message || 'Error al iniciar el escáner');
+      setIsScanningInSelector(false);
+    }
+  };
+
+  // Función para iniciar el escáner nativo
+  const startNativeScanner = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      });
+
+      if (selectorVideoRef.current) {
+        selectorVideoRef.current.srcObject = stream;
+        await selectorVideoRef.current.play();
+      }
+
+      // Configurar timeout para el escáner nativo
+      scannerTimeoutRef.current = setTimeout(() => {
+        stopScannerInSelector();
+        setScannerError('Tiempo de escaneo agotado');
+      }, 30000);
+    } catch (error) {
+      console.error('Error al iniciar escáner nativo:', error);
+      setScannerError('No se pudo acceder a la cámara');
       setIsScanningInSelector(false);
     }
   };
@@ -818,13 +1059,194 @@ function Inventario() {
   // Función para detener el escáner en el selector
   const stopScannerInSelector = async () => {
     try {
-      const Quagga = (await import('quagga')).default;
-      Quagga.stop();
+      // Limpiar timeout
+      if (scannerTimeoutRef.current) {
+        clearTimeout(scannerTimeoutRef.current);
+        scannerTimeoutRef.current = null;
+      }
+
+      // Detener Quagga si está activo
+      try {
+        const Quagga = (await import('quagga')).default;
+        if (Quagga.isRunning) {
+          Quagga.stop();
+        }
+      } catch (error) {
+        console.log('Quagga no está disponible');
+      }
+
+      // Detener stream de video si existe
+      if (selectorVideoRef.current && selectorVideoRef.current.srcObject) {
+        const tracks = selectorVideoRef.current.srcObject.getTracks();
+        tracks.forEach(track => track.stop());
+        selectorVideoRef.current.srcObject = null;
+      }
     } catch (error) {
-      console.error('Error stopping scanner:', error);
+      console.error('Error al detener escáner:', error);
+    } finally {
+      setIsScanningInSelector(false);
+      setScannerError('');
     }
-    setIsScanningInSelector(false);
   };
+
+  // Cargar proveedores al abrir el diálogo
+  useEffect(() => {
+    if (openStockDialog) {
+      cargarProveedores();
+    }
+  }, [openStockDialog]);
+
+  // Función para cargar proveedores
+  const cargarProveedores = async () => {
+    try {
+      setIsLoadingProveedores(true);
+      const response = await fetch('http://localhost:5000/api/inventario/proveedores', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setProveedores(data.proveedores || []);
+      } else {
+        throw new Error('Error al cargar proveedores');
+      }
+    } catch (error) {
+      console.error('Error al cargar proveedores:', error);
+      setProveedorError('Error al cargar la lista de proveedores');
+    } finally {
+      setIsLoadingProveedores(false);
+    }
+  };
+
+  // Función para manejar el ordenamiento de proveedores
+  const handleSortProveedores = (key) => {
+    setSortProveedorConfig(prevConfig => ({
+      key,
+      direction: prevConfig.key === key && prevConfig.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  // Función para filtrar y ordenar proveedores
+  const getFilteredAndSortedProveedores = () => {
+    let filtered = [...proveedores];
+    
+    // Aplicar filtro de búsqueda
+    if (searchProveedor) {
+      const term = searchProveedor.toLowerCase();
+      filtered = filtered.filter(proveedor => 
+        proveedor.nombre?.toLowerCase().includes(term) ||
+        proveedor.contacto?.toLowerCase().includes(term) ||
+        proveedor.email?.toLowerCase().includes(term) ||
+        proveedor.telefono?.includes(term)
+      );
+    }
+
+    // Aplicar ordenamiento
+    filtered.sort((a, b) => {
+      if (!a[sortProveedorConfig.key] || !b[sortProveedorConfig.key]) return 0;
+      
+      const aValue = a[sortProveedorConfig.key].toString().toLowerCase();
+      const bValue = b[sortProveedorConfig.key].toString().toLowerCase();
+      
+      if (aValue < bValue) return sortProveedorConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortProveedorConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return filtered;
+  };
+
+  // Función para manejar el envío del formulario de proveedor
+  const handleProveedorSubmit = async (e) => {
+    e.preventDefault();
+    setProveedorError('');
+    setProveedorSuccess('');
+    setIsLoadingProveedores(true);
+
+    try {
+      // Validaciones
+      if (!proveedorActual.nombre.trim()) {
+        throw new Error('El nombre del proveedor es obligatorio');
+      }
+
+      if (proveedorActual.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(proveedorActual.email)) {
+        throw new Error('El email no es válido');
+      }
+
+      const url = proveedorActual.id
+        ? `http://localhost:5000/api/inventario/proveedores/${proveedorActual.id}`
+        : 'http://localhost:5000/api/inventario/proveedores';
+      
+      const method = proveedorActual.id ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify(proveedorActual),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Error al guardar el proveedor');
+      }
+
+      setProveedorSuccess(`Proveedor ${proveedorActual.id ? 'actualizado' : 'creado'} exitosamente`);
+      setProveedorActual({
+        nombre: '',
+        contacto: '',
+        telefono: '',
+        email: '',
+        direccion: '',
+        notas: ''
+      });
+      
+      await cargarProveedores();
+    } catch (error) {
+      console.error('Error en handleProveedorSubmit:', error);
+      setProveedorError(error.message);
+    } finally {
+      setIsLoadingProveedores(false);
+    }
+  };
+
+  // Función para eliminar proveedor
+  const handleDeleteProveedor = async (id) => {
+    if (!window.confirm('¿Está seguro de eliminar este proveedor?')) return;
+
+    try {
+      setIsLoadingProveedores(true);
+      const response = await fetch(`http://localhost:5000/api/inventario/proveedores/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Error al eliminar el proveedor');
+      }
+
+      setProveedorSuccess('Proveedor eliminado exitosamente');
+      await cargarProveedores();
+    } catch (error) {
+      console.error('Error al eliminar proveedor:', error);
+      setProveedorError(error.message);
+    } finally {
+      setIsLoadingProveedores(false);
+    }
+  };
+
+  // Efecto para cargar proveedores al abrir el diálogo
+  useEffect(() => {
+    if (openProveedoresDialog) {
+      cargarProveedores();
+    }
+  }, [openProveedoresDialog]);
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
@@ -844,6 +1266,13 @@ function Inventario() {
             onClick={handleOpenStockDialog}
           >
             Stock
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<BusinessIcon />}
+            onClick={() => setOpenProveedoresDialog(true)}
+          >
+            Proveedores
           </Button>
           <Button
             variant="contained"
@@ -1032,12 +1461,12 @@ function Inventario() {
                   value={repuestoActual.nombre}
                   onChange={handleInputChange}
                   required
-                  error={!repuestoActual.nombre && error.includes('Nombre')}
+                  error={Boolean(!repuestoActual.nombre && error.includes('Nombre'))}
                   helperText={!repuestoActual.nombre && error.includes('Nombre') ? 'El nombre es obligatorio' : ''}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required error={!repuestoActual.categoria && error.includes('Categoría')}>
+                <FormControl fullWidth required error={Boolean(!repuestoActual.categoria && error.includes('Categoría'))}>
                   <InputLabel>Categoría</InputLabel>
                   <Select
                     name="categoria"
@@ -1115,7 +1544,7 @@ function Inventario() {
                   value={precioCompraInput}
                   onChange={handleInputChange}
                   required
-                  error={(!repuestoActual.precio_compra || repuestoActual.precio_compra <= 0) && error.includes('Precio de Compra')}
+                  error={Boolean((!repuestoActual.precio_compra || repuestoActual.precio_compra <= 0) && error.includes('Precio de Compra'))}
                   helperText={(!repuestoActual.precio_compra || repuestoActual.precio_compra <= 0) && error.includes('Precio de Compra') ? 'El precio debe ser mayor a 0' : ''}
                   InputProps={{
                     startAdornment: <InputAdornment position="start">$</InputAdornment>,
@@ -1131,7 +1560,7 @@ function Inventario() {
                   value={precioVentaInput}
                   onChange={handleInputChange}
                   required
-                  error={(!repuestoActual.precio_venta || repuestoActual.precio_venta <= 0) && error.includes('Precio de Venta')}
+                  error={Boolean((!repuestoActual.precio_venta || repuestoActual.precio_venta <= 0) && error.includes('Precio de Venta'))}
                   helperText={(!repuestoActual.precio_venta || repuestoActual.precio_venta <= 0) && error.includes('Precio de Venta') ? 'El precio debe ser mayor a 0' : ''}
                   InputProps={{
                     startAdornment: <InputAdornment position="start">$</InputAdornment>,
@@ -1292,7 +1721,7 @@ function Inventario() {
           <Box component="form" onSubmit={handleMovimientoSubmit} sx={{ mt: 2 }}>
             <Grid container spacing={2}>
               <Grid item xs={12}>
-                <FormControl fullWidth>
+                <FormControl fullWidth error={Boolean(movimientoError)}>
                   <InputLabel>Tipo de Movimiento</InputLabel>
                   <Select
                     name="tipo"
@@ -1303,9 +1732,12 @@ function Inventario() {
                     <MenuItem value="entrada">Entrada</MenuItem>
                     <MenuItem value="salida">Salida</MenuItem>
                   </Select>
+                  {movimientoError && (
+                    <FormHelperText>{movimientoError}</FormHelperText>
+                  )}
                 </FormControl>
               </Grid>
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   label="Cantidad"
@@ -1314,7 +1746,82 @@ function Inventario() {
                   value={movimientoActual.cantidad}
                   onChange={handleMovimientoInputChange}
                   required
+                  error={Boolean(movimientoError)}
+                  helperText={movimientoError}
+                  InputProps={{
+                    inputProps: { min: 1 }
+                  }}
                 />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Fecha"
+                  name="fecha_movimiento"
+                  type="date"
+                  value={movimientoActual.fecha_movimiento}
+                  onChange={handleMovimientoInputChange}
+                  required
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                />
+              </Grid>
+              {movimientoActual.tipo === 'entrada' && (
+                <>
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Precio Unitario"
+                      name="precio_unitario"
+                      type="number"
+                      value={movimientoActual.precio_unitario}
+                      onChange={handleMovimientoInputChange}
+                      required
+                      InputProps={{
+                        startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                        inputProps: { min: 0, step: "0.01" }
+                      }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <FormControl fullWidth>
+                      <InputLabel>Proveedor</InputLabel>
+                      <Select
+                        name="proveedor"
+                        value={movimientoActual.proveedor}
+                        onChange={handleMovimientoInputChange}
+                        label="Proveedor"
+                      >
+                        <MenuItem value="">
+                          <em>Ninguno</em>
+                        </MenuItem>
+                        {proveedores.map((proveedor) => (
+                          <MenuItem key={proveedor.id} value={proveedor.id}>
+                            {proveedor.nombre}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </>
+              )}
+              <Grid item xs={12}>
+                <FormControl fullWidth required>
+                  <InputLabel>Motivo</InputLabel>
+                  <Select
+                    name="motivo"
+                    value={movimientoActual.motivo}
+                    onChange={handleMovimientoInputChange}
+                    label="Motivo"
+                  >
+                    {motivos.map((motivo) => (
+                      <MenuItem key={motivo} value={motivo}>
+                        {motivo}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Grid>
               <Grid item xs={12}>
                 <TextField
@@ -1327,15 +1834,61 @@ function Inventario() {
                   rows={2}
                 />
               </Grid>
+              {movimientoActual.tipo === 'entrada' && (
+                <Grid item xs={12}>
+                  <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.default' }}>
+                    <Typography variant="subtitle1" gutterBottom>
+                      Resumen
+                    </Typography>
+                    <Grid container spacing={1}>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">
+                          Cantidad:
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2">
+                          {movimientoActual.cantidad} unidades
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">
+                          Precio Unitario:
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2">
+                          ${movimientoActual.precio_unitario}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">
+                          Total:
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="primary.main" fontWeight="bold">
+                          ${calcularTotal()}
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </Paper>
+                </Grid>
+              )}
+              <Grid item xs={12}>
+                <Button 
+                  type="submit" 
+                  variant="contained" 
+                  fullWidth
+                  disabled={isLoadingMovimientos}
+                  startIcon={isLoadingMovimientos ? <CircularProgress size={20} /> : null}
+                >
+                  {isLoadingMovimientos ? 'Registrando...' : 'Registrar Movimiento'}
+                </Button>
+              </Grid>
             </Grid>
           </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseMovimientoDialog}>Cancelar</Button>
-          <Button onClick={handleMovimientoSubmit} variant="contained">
-            Registrar
-          </Button>
-        </DialogActions>
       </Dialog>
 
       {/* Diálogo de detalles */}
@@ -1703,6 +2256,8 @@ function Inventario() {
                 <video 
                   ref={selectorVideoRef}
                   style={{ width: '100%', height: 'auto' }}
+                  playsInline
+                  autoPlay
                 />
                 <Box
                   sx={{
@@ -1748,8 +2303,18 @@ function Inventario() {
                   textAlign: 'center'
                 }}
               >
-                Enfoca el código de barras en el área de la cámara
+                {scannerError || 'Enfoca el código de barras en el área de la cámara'}
               </Typography>
+              {scannerError && (
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={startScannerInSelector}
+                  sx={{ mt: 2 }}
+                >
+                  Reintentar
+                </Button>
+              )}
             </Box>
           )}
 
@@ -1892,7 +2457,7 @@ function Inventario() {
                 <Box component="form" onSubmit={handleMovimientoSubmit} sx={{ mt: 2 }}>
                   <Grid container spacing={2}>
                     <Grid item xs={12}>
-                      <FormControl fullWidth>
+                      <FormControl fullWidth error={Boolean(movimientoError)}>
                         <InputLabel>Tipo de Movimiento</InputLabel>
                         <Select
                           name="tipo"
@@ -1903,9 +2468,13 @@ function Inventario() {
                           <MenuItem value="entrada">Entrada</MenuItem>
                           <MenuItem value="salida">Salida</MenuItem>
                         </Select>
+                        {movimientoError && (
+                          <FormHelperText>{movimientoError}</FormHelperText>
+                        )}
                       </FormControl>
                     </Grid>
-                    <Grid item xs={12}>
+
+                    <Grid item xs={12} sm={6}>
                       <TextField
                         fullWidth
                         label="Cantidad"
@@ -1914,8 +2483,88 @@ function Inventario() {
                         value={movimientoActual.cantidad}
                         onChange={handleMovimientoInputChange}
                         required
+                        error={!!movimientoError}
+                        helperText={movimientoError}
+                        InputProps={{
+                          inputProps: { min: 1 }
+                        }}
                       />
                     </Grid>
+
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        label="Fecha"
+                        name="fecha_movimiento"
+                        type="date"
+                        value={movimientoActual.fecha_movimiento}
+                        onChange={handleMovimientoInputChange}
+                        required
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                      />
+                    </Grid>
+
+                    {movimientoActual.tipo === 'entrada' && (
+                      <>
+                        <Grid item xs={12} sm={6}>
+                          <TextField
+                            fullWidth
+                            label="Precio Unitario"
+                            name="precio_unitario"
+                            type="number"
+                            value={movimientoActual.precio_unitario}
+                            onChange={handleMovimientoInputChange}
+                            required
+                            InputProps={{
+                              startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                              inputProps: { min: 0, step: "0.01" }
+                            }}
+                          />
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                          <FormControl fullWidth>
+                            <InputLabel>Proveedor</InputLabel>
+                            <Select
+                              name="proveedor"
+                              value={movimientoActual.proveedor}
+                              onChange={handleMovimientoInputChange}
+                              label="Proveedor"
+                            >
+                              <MenuItem value="">
+                                <em>Ninguno</em>
+                              </MenuItem>
+                              {proveedores.map((proveedor) => (
+                                <MenuItem key={proveedor.id} value={proveedor.id}>
+                                  {proveedor.nombre}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                      </>
+                    )}
+
+                    <Grid item xs={12}>
+                      <FormControl fullWidth required>
+                        <InputLabel>Motivo</InputLabel>
+                        <Select
+                          name="motivo"
+                          value={movimientoActual.motivo}
+                          onChange={handleMovimientoInputChange}
+                          label="Motivo"
+                        >
+                          {motivos.map((motivo) => (
+                            <MenuItem key={motivo} value={motivo}>
+                              {motivo}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Grid>
+
                     <Grid item xs={12}>
                       <TextField
                         fullWidth
@@ -1927,14 +2576,58 @@ function Inventario() {
                         rows={2}
                       />
                     </Grid>
+
+                    {movimientoActual.tipo === 'entrada' && (
+                      <Grid item xs={12}>
+                        <Paper variant="outlined" sx={{ p: 2, bgcolor: 'background.default' }}>
+                          <Typography variant="subtitle1" gutterBottom>
+                            Resumen
+                          </Typography>
+                          <Grid container spacing={1}>
+                            <Grid item xs={6}>
+                              <Typography variant="body2" color="text.secondary">
+                                Cantidad:
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography variant="body2">
+                                {movimientoActual.cantidad} unidades
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography variant="body2" color="text.secondary">
+                                Precio Unitario:
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography variant="body2">
+                                ${movimientoActual.precio_unitario}
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography variant="body2" color="text.secondary">
+                                Total:
+                              </Typography>
+                            </Grid>
+                            <Grid item xs={6}>
+                              <Typography variant="body2" color="primary.main" fontWeight="bold">
+                                ${calcularTotal()}
+                              </Typography>
+                            </Grid>
+                          </Grid>
+                        </Paper>
+                      </Grid>
+                    )}
+
                     <Grid item xs={12}>
                       <Button 
                         type="submit" 
                         variant="contained" 
                         fullWidth
-                        disabled={loading}
+                        disabled={isLoadingMovimientos}
+                        startIcon={isLoadingMovimientos ? <CircularProgress size={20} /> : null}
                       >
-                        {loading ? <CircularProgress size={24} /> : 'Registrar Movimiento'}
+                        {isLoadingMovimientos ? 'Registrando...' : 'Registrar Movimiento'}
                       </Button>
                     </Grid>
                   </Grid>
@@ -1948,38 +2641,283 @@ function Inventario() {
                 <Typography variant="h6" gutterBottom>
                   Historial de Movimientos
                 </Typography>
-                <TableContainer>
-                  <Table size="small">
+                {isLoadingMovimientos ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <TableContainer>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Fecha</TableCell>
+                          <TableCell>Tipo</TableCell>
+                          <TableCell>Cantidad</TableCell>
+                          <TableCell>Notas</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {historialMovimientos.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={4} align="center">
+                              No hay movimientos registrados
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          historialMovimientos.map((movimiento) => (
+                            <TableRow key={movimiento.id}>
+                              <TableCell>
+                                {new Date(movimiento.fecha).toLocaleString()}
+                              </TableCell>
+                              <TableCell>
+                                <Chip 
+                                  label={movimiento.tipo === 'entrada' ? 'Entrada' : 'Salida'}
+                                  color={movimiento.tipo === 'entrada' ? 'success' : 'error'}
+                                  size="small"
+                                />
+                              </TableCell>
+                              <TableCell>{movimiento.cantidad}</TableCell>
+                              <TableCell>{movimiento.notas}</TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </Paper>
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={handleCloseStockDialog}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={!!movimientoError || !!movimientoSuccess}
+        autoHideDuration={6000}
+        onClose={() => {
+          setMovimientoError('');
+          setMovimientoSuccess('');
+        }}
+      >
+        <Alert
+          onClose={() => {
+            setMovimientoError('');
+            setMovimientoSuccess('');
+          }}
+          severity={movimientoError ? 'error' : 'success'}
+        >
+          {movimientoError || movimientoSuccess}
+        </Alert>
+      </Snackbar>
+
+      {/* Diálogo de Gestión de Proveedores */}
+      <Dialog 
+        open={openProveedoresDialog} 
+        onClose={() => setOpenProveedoresDialog(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">
+              Gestión de Proveedores
+            </Typography>
+            <IconButton onClick={() => setOpenProveedoresDialog(false)}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Grid container spacing={3}>
+            {/* Formulario de Proveedor */}
+            <Grid item xs={12} md={4}>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  {proveedorActual.id ? 'Editar Proveedor' : 'Nuevo Proveedor'}
+                </Typography>
+                <Box component="form" onSubmit={handleProveedorSubmit} sx={{ mt: 2 }}>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Nombre"
+                        name="nombre"
+                        value={proveedorActual.nombre}
+                        onChange={(e) => setProveedorActual(prev => ({ ...prev, nombre: e.target.value }))}
+                        required
+                        error={Boolean(proveedorError && !proveedorActual.nombre)}
+                        helperText={proveedorError && !proveedorActual.nombre ? 'El nombre es obligatorio' : ''}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Contacto"
+                        name="contacto"
+                        value={proveedorActual.contacto}
+                        onChange={(e) => setProveedorActual(prev => ({ ...prev, contacto: e.target.value }))}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Teléfono"
+                        name="telefono"
+                        value={proveedorActual.telefono}
+                        onChange={(e) => setProveedorActual(prev => ({ ...prev, telefono: e.target.value }))}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Email"
+                        name="email"
+                        type="email"
+                        value={proveedorActual.email}
+                        onChange={(e) => setProveedorActual(prev => ({ ...prev, email: e.target.value }))}
+                        error={Boolean(proveedorError && proveedorActual.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(proveedorActual.email))}
+                        helperText={proveedorError && proveedorActual.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(proveedorActual.email) ? 'Email inválido' : ''}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Dirección"
+                        name="direccion"
+                        value={proveedorActual.direccion}
+                        onChange={(e) => setProveedorActual(prev => ({ ...prev, direccion: e.target.value }))}
+                        multiline
+                        rows={2}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Notas"
+                        name="notas"
+                        value={proveedorActual.notas}
+                        onChange={(e) => setProveedorActual(prev => ({ ...prev, notas: e.target.value }))}
+                        multiline
+                        rows={2}
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Button 
+                        type="submit" 
+                        variant="contained" 
+                        fullWidth
+                        disabled={isLoadingProveedores}
+                        startIcon={isLoadingProveedores ? <CircularProgress size={20} /> : null}
+                      >
+                        {isLoadingProveedores ? 'Guardando...' : (proveedorActual.id ? 'Actualizar' : 'Crear')}
+                      </Button>
+                    </Grid>
+                  </Grid>
+                </Box>
+              </Paper>
+            </Grid>
+
+            {/* Lista de Proveedores */}
+            <Grid item xs={12} md={8}>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Box sx={{ mb: 2 }}>
+                  <TextField
+                    fullWidth
+                    variant="outlined"
+                    placeholder="Buscar proveedor..."
+                    value={searchProveedor}
+                    onChange={(e) => setSearchProveedor(e.target.value)}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon />
+                        </InputAdornment>
+                      ),
+                      endAdornment: searchProveedor && (
+                        <InputAdornment position="end">
+                          <IconButton
+                            size="small"
+                            onClick={() => setSearchProveedor('')}
+                          >
+                            <CloseIcon />
+                          </IconButton>
+                        </InputAdornment>
+                      )
+                    }}
+                  />
+                </Box>
+
+                <TableContainer sx={{ maxHeight: 440 }}>
+                  <Table stickyHeader size="small">
                     <TableHead>
                       <TableRow>
-                        <TableCell>Fecha</TableCell>
-                        <TableCell>Tipo</TableCell>
-                        <TableCell>Cantidad</TableCell>
-                        <TableCell>Notas</TableCell>
+                        <TableCell 
+                          onClick={() => handleSortProveedores('nombre')}
+                          sx={{ cursor: 'pointer', userSelect: 'none' }}
+                        >
+                          Nombre
+                          {sortProveedorConfig.key === 'nombre' && (
+                            <span>{sortProveedorConfig.direction === 'asc' ? ' ↑' : ' ↓'}</span>
+                          )}
+                        </TableCell>
+                        <TableCell 
+                          onClick={() => handleSortProveedores('contacto')}
+                          sx={{ cursor: 'pointer', userSelect: 'none' }}
+                        >
+                          Contacto
+                          {sortProveedorConfig.key === 'contacto' && (
+                            <span>{sortProveedorConfig.direction === 'asc' ? ' ↑' : ' ↓'}</span>
+                          )}
+                        </TableCell>
+                        <TableCell>Teléfono</TableCell>
+                        <TableCell>Email</TableCell>
+                        <TableCell>Acciones</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {historialMovimientos.length === 0 ? (
+                      {isLoadingProveedores ? (
                         <TableRow>
-                          <TableCell colSpan={4} align="center">
-                            No hay movimientos registrados
+                          <TableCell colSpan={5} align="center">
+                            <CircularProgress />
+                          </TableCell>
+                        </TableRow>
+                      ) : getFilteredAndSortedProveedores().length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} align="center">
+                            No se encontraron proveedores
                           </TableCell>
                         </TableRow>
                       ) : (
-                        historialMovimientos.map((movimiento) => (
-                          <TableRow key={movimiento.id}>
+                        getFilteredAndSortedProveedores().map((proveedor) => (
+                          <TableRow key={proveedor.id} hover>
+                            <TableCell>{proveedor.nombre}</TableCell>
+                            <TableCell>{proveedor.contacto}</TableCell>
+                            <TableCell>{proveedor.telefono}</TableCell>
+                            <TableCell>{proveedor.email}</TableCell>
                             <TableCell>
-                              {new Date(movimiento.fecha).toLocaleString()}
+                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                <Tooltip title="Editar">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => setProveedorActual(proveedor)}
+                                  >
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Eliminar">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleDeleteProveedor(proveedor.id)}
+                                    color="error"
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </Box>
                             </TableCell>
-                            <TableCell>
-                              <Chip 
-                                label={movimiento.tipo === 'entrada' ? 'Entrada' : 'Salida'}
-                                color={movimiento.tipo === 'entrada' ? 'success' : 'error'}
-                                size="small"
-                              />
-                            </TableCell>
-                            <TableCell>{movimiento.cantidad}</TableCell>
-                            <TableCell>{movimiento.notas}</TableCell>
                           </TableRow>
                         ))
                       )}
@@ -1990,24 +2928,27 @@ function Inventario() {
             </Grid>
           </Grid>
         </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setOpenProveedoresDialog(false)}>Cerrar</Button>
+        </DialogActions>
       </Dialog>
 
       <Snackbar
-        open={!!error || !!success}
+        open={!!proveedorError || !!proveedorSuccess}
         autoHideDuration={6000}
         onClose={() => {
-          setError('');
-          setSuccess('');
+          setProveedorError('');
+          setProveedorSuccess('');
         }}
       >
         <Alert
           onClose={() => {
-            setError('');
-            setSuccess('');
+            setProveedorError('');
+            setProveedorSuccess('');
           }}
-          severity={error ? 'error' : 'success'}
+          severity={proveedorError ? 'error' : 'success'}
         >
-          {error || success}
+          {proveedorError || proveedorSuccess}
         </Alert>
       </Snackbar>
     </Container>

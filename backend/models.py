@@ -1,4 +1,4 @@
-from extensions import db
+from backend.extensions import db
 from datetime import datetime, timezone
 from werkzeug.security import generate_password_hash, check_password_hash
 import hashlib
@@ -422,6 +422,35 @@ class HistorialEstado(db.Model):
     
     usuario = db.relationship('Usuario', backref='cambios_estado')
 
+class Proveedor(db.Model):
+    __tablename__ = 'proveedor'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False)
+    contacto = db.Column(db.String(100))
+    telefono = db.Column(db.String(20))
+    email = db.Column(db.String(120))
+    direccion = db.Column(db.String(200))
+    estado = db.Column(db.String(20), default='activo')
+    fecha_registro = db.Column(db.DateTime, default=datetime.utcnow)
+    notas = db.Column(db.Text)
+    
+    # Relaciones
+    repuestos = db.relationship('Repuesto', back_populates='proveedor')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nombre': self.nombre,
+            'contacto': self.contacto,
+            'telefono': self.telefono,
+            'email': self.email,
+            'direccion': self.direccion,
+            'estado': self.estado,
+            'fecha_registro': self.fecha_registro.isoformat(),
+            'notas': self.notas
+        }
+
 class Repuesto(db.Model):
     __tablename__ = 'repuesto'
     
@@ -438,7 +467,9 @@ class Repuesto(db.Model):
     fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # ✅ CORREGIR RELACIONES
+    # Relaciones
+    proveedor_id = db.Column(db.Integer, db.ForeignKey('proveedor.id'))
+    proveedor = db.relationship('Proveedor', back_populates='repuestos')
     movimientos = db.relationship('MovimientoInventario', back_populates='repuesto', cascade='all, delete-orphan')
     
     __table_args__ = (
@@ -458,7 +489,8 @@ class Repuesto(db.Model):
             'categoria': self.categoria,
             'estado': self.estado,
             'fecha_creacion': self.fecha_creacion.isoformat(),
-            'fecha_actualizacion': self.fecha_actualizacion.isoformat()
+            'fecha_actualizacion': self.fecha_actualizacion.isoformat(),
+            'proveedor': self.proveedor.to_dict() if self.proveedor else None
         }
 
 class Evento(db.Model):

@@ -1,5 +1,5 @@
-from app import create_app
-from models import db, Usuario
+from backend.app import create_app
+from backend.models import db, Usuario, Repuesto, Proveedor, MovimientoInventario, Servicio, Cliente, Vehiculo, Mecanico, Factura, Pago, HistorialMantenimiento, Notificacion, Configuracion, Evento, HoraTrabajo, HistorialEstado, ArchivoServicio, FotoServicio
 import time
 import os
 

@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
-from models import Factura, Servicio, db
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from backend.models import Factura, Servicio
+from backend.extensions import db
 from datetime import datetime
 from sqlalchemy import or_
 
