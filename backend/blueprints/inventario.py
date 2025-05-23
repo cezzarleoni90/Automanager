@@ -1,9 +1,11 @@
 from flask import Blueprint, jsonify, request
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import Repuesto, MovimientoInventario, db
 from datetime import datetime, timedelta
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from functools import wraps
+from utils.api_response import success_response, error_response, paginated_response
+from sqlalchemy import or_
 
 inventario_bp = Blueprint('inventario', __name__)
 
@@ -122,93 +124,158 @@ def transaction_handler(f):
 
 # ========== REPUESTOS ==========
 
-# Obtener todos los repuestos
 @inventario_bp.route('/repuestos', methods=['GET'])
 @jwt_required()
 def get_repuestos():
     try:
-        repuestos = Repuesto.query.all()
-        return jsonify({
-            'repuestos': [{
-                'id': r.id,
-                'codigo': r.codigo,
-                'nombre': r.nombre,
-                'descripcion': r.descripcion,
-                'categoria': r.categoria,
-                'stock_actual': r.stock,
-                'stock_minimo': r.stock_minimo,
-                'precio_compra': r.precio_compra,
-                'precio_venta': r.precio_venta,
-                'estado': r.estado,
-                'proveedor': getattr(r, 'proveedor', '') or ''
-            } for r in repuestos]
-        }), 200
+        # Obtener parámetros de paginación y filtrado
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        categoria = request.args.get('categoria')
+        stock_bajo = request.args.get('stock_bajo', 'false').lower() == 'true'
+        busqueda = request.args.get('busqueda')
+        
+        # Construir query base
+        query = Repuesto.query
+        
+        # Aplicar filtros
+        if categoria:
+            query = query.filter_by(categoria=categoria)
+        if stock_bajo:
+            query = query.filter(Repuesto.stock <= Repuesto.stock_minimo)
+        if busqueda:
+            query = query.filter(
+                or_(
+                    Repuesto.nombre.ilike(f'%{busqueda}%'),
+                    Repuesto.codigo.ilike(f'%{busqueda}%'),
+                    Repuesto.categoria.ilike(f'%{busqueda}%')
+                )
+            )
+        
+        # Obtener total y aplicar paginación
+        total = query.count()
+        repuestos = query.order_by(Repuesto.nombre)\
+            .offset((page - 1) * per_page)\
+            .limit(per_page)\
+            .all()
+        
+        # Formatear respuesta
+        items = [{
+            'id': r.id,
+            'codigo': r.codigo,
+            'nombre': r.nombre,
+            'descripcion': r.descripcion,
+            'categoria': r.categoria,
+            'stock_actual': r.stock,
+            'stock_minimo': r.stock_minimo,
+            'precio_compra': r.precio_compra,
+            'precio_venta': r.precio_venta,
+            'estado': r.estado,
+            'proveedor': getattr(r, 'proveedor', '') or ''
+        } for r in repuestos]
+        
+        return paginated_response(
+            items=items,
+            total=total,
+            page=page,
+            per_page=per_page,
+            message="Lista de repuestos obtenida exitosamente"
+        )
+        
     except Exception as e:
-        return handle_error(e)
+        return error_response(
+            message="Error al obtener la lista de repuestos",
+            errors=[str(e)],
+            status_code=500
+        )
 
-# Obtener repuesto por ID
 @inventario_bp.route('/repuestos/<int:id>', methods=['GET'])
 @jwt_required()
 def get_repuesto(id):
     try:
         repuesto = Repuesto.query.get_or_404(id)
-        return jsonify({
-            'id': repuesto.id,
-            'codigo': repuesto.codigo,
-            'nombre': repuesto.nombre,
-            'descripcion': repuesto.descripcion,
-            'categoria': repuesto.categoria,
-            'stock_minimo': repuesto.stock_minimo,
-            'stock_actual': repuesto.stock,
-            'precio_compra': repuesto.precio_compra,
-            'precio_venta': repuesto.precio_venta,
-            'proveedor': repuesto.proveedor if hasattr(repuesto, 'proveedor') else '',
-            'estado': repuesto.estado
-        }), 200
+        return success_response(
+            data={
+                'id': repuesto.id,
+                'codigo': repuesto.codigo,
+                'nombre': repuesto.nombre,
+                'descripcion': repuesto.descripcion,
+                'categoria': repuesto.categoria,
+                'stock_minimo': repuesto.stock_minimo,
+                'stock_actual': repuesto.stock,
+                'precio_compra': repuesto.precio_compra,
+                'precio_venta': repuesto.precio_venta,
+                'proveedor': repuesto.proveedor if hasattr(repuesto, 'proveedor') else '',
+                'estado': repuesto.estado
+            },
+            message="Repuesto obtenido exitosamente"
+        )
     except Exception as e:
-        return handle_error(e)
+        return error_response(
+            message="Error al obtener el repuesto",
+            errors=[str(e)],
+            status_code=500
+        )
 
-# Crear repuesto
 @inventario_bp.route('/repuestos', methods=['POST'])
 @jwt_required()
 @transaction_handler
 def create_repuesto():
-    data = request.get_json()
-    
-    # Validar datos
-    errores = validar_repuesto(data)
-    if errores:
-        return jsonify({'error': errores}), 400
-    
-    # Verificar código único
-    if Repuesto.query.filter_by(codigo=data['codigo']).first():
-        raise CodigoDuplicadoError(f'El código del repuesto {data["codigo"]} ya existe')
-    
-    # Crear repuesto
-    repuesto = Repuesto(
-        codigo=data['codigo'],
-        nombre=data['nombre'],
-        descripcion=data.get('descripcion', ''),
-        categoria=data['categoria'],
-        stock=data.get('stock', 0),
-        stock_minimo=data.get('stock_minimo', 0),
-        precio_compra=float(data['precio_compra']),
-        precio_venta=float(data['precio_venta']),
-        estado='activo'
-    )
-    
-    db.session.add(repuesto)
-    
-    return jsonify({
-        'mensaje': 'Repuesto creado exitosamente',
-        'repuesto': {
-            'id': repuesto.id,
-            'codigo': repuesto.codigo,
-            'nombre': repuesto.nombre,
-            'categoria': repuesto.categoria,
-            'stock_actual': repuesto.stock
-        }
-    }), 201
+    try:
+        data = request.get_json()
+        
+        # Validar datos
+        errores = validar_repuesto(data)
+        if errores:
+            return error_response(
+                message="Error de validación",
+                errors=errores,
+                status_code=400
+            )
+        
+        # Verificar código único
+        if Repuesto.query.filter_by(codigo=data['codigo']).first():
+            return error_response(
+                message="Error de validación",
+                errors=[f'El código del repuesto {data["codigo"]} ya existe'],
+                status_code=400
+            )
+        
+        # Crear repuesto
+        repuesto = Repuesto(
+            codigo=data['codigo'],
+            nombre=data['nombre'],
+            descripcion=data.get('descripcion', ''),
+            categoria=data['categoria'],
+            stock=data.get('stock', 0),
+            stock_minimo=data.get('stock_minimo', 0),
+            precio_compra=float(data['precio_compra']),
+            precio_venta=float(data['precio_venta']),
+            estado='activo'
+        )
+        
+        db.session.add(repuesto)
+        db.session.commit()
+        
+        return success_response(
+            data={
+                'id': repuesto.id,
+                'codigo': repuesto.codigo,
+                'nombre': repuesto.nombre,
+                'categoria': repuesto.categoria,
+                'stock_actual': repuesto.stock
+            },
+            message="Repuesto creado exitosamente",
+            status_code=201
+        )
+        
+    except Exception as e:
+        db.session.rollback()
+        return error_response(
+            message="Error al crear el repuesto",
+            errors=[str(e)],
+            status_code=500
+        )
 
 # Actualizar repuesto
 @inventario_bp.route('/repuestos/<int:id>', methods=['PUT'])

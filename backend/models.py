@@ -490,43 +490,32 @@ class HoraTrabajo(db.Model):
     servicio_id = db.Column(db.Integer, db.ForeignKey('servicio.id'))
     notas = db.Column(db.Text)
 
-class MovimientoInventario(db.Model):
-    __tablename__ = 'movimiento_inventario'
-    
+class Inventario(db.Model):
+    __tablename__ = 'inventario'
     id = db.Column(db.Integer, primary_key=True)
-    repuesto_id = db.Column(db.Integer, db.ForeignKey('repuesto.id'), nullable=False)
-    tipo = db.Column(db.String(20), nullable=False)  # ✅ Cambiar de 10 a 20
-    cantidad = db.Column(db.Integer, nullable=False)
-    notas = db.Column(db.Text)  # ✅ Cambiar de 'motivo' a 'notas'
-    fecha = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Claves foráneas
-    servicio_id = db.Column(db.Integer, db.ForeignKey('servicio.id'), nullable=True)
-    usuario_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=True)
-    
+    nombre = db.Column(db.String(100), nullable=False)
+    descripcion = db.Column(db.Text)
+    stock = db.Column(db.Integer, default=0)
+    stock_minimo = db.Column(db.Integer, default=5)
+    precio_compra = db.Column(db.Float)
+    precio_venta = db.Column(db.Float)
+    categoria = db.Column(db.String(50))
+    fecha_ultima_actualizacion = db.Column(db.DateTime, default=datetime.utcnow)
     # Relaciones
-    repuesto = db.relationship('Repuesto', back_populates='movimientos')
-    servicio = db.relationship('Servicio', back_populates='movimientos_inventario')
-    usuario = db.relationship('Usuario', backref='movimientos_inventario')
+    movimientos = db.relationship('MovimientoInventario', backref='inventario', lazy=True)
 
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'tipo': self.tipo,
-            'cantidad': self.cantidad,
-            'notas': self.notas,  # ✅ Cambiar de 'motivo' a 'notas'
-            'fecha': self.fecha.isoformat(),
-            'repuesto': {
-                'id': self.repuesto.id,
-                'nombre': self.repuesto.nombre,
-                'codigo': self.repuesto.codigo
-            },
-            'servicio': {
-                'id': self.servicio.id,
-                'tipo_servicio': self.servicio.tipo_servicio
-            } if self.servicio else None,
-            'usuario': f"{self.usuario.nombre} {self.usuario.apellido}" if self.usuario else None
-        }
+class MovimientoInventario(db.Model):
+    __tablename__ = 'movimientos_inventario'
+    id = db.Column(db.Integer, primary_key=True)
+    inventario_id = db.Column(db.Integer, db.ForeignKey('inventario.id'), nullable=False)
+    servicio_id = db.Column(db.Integer, db.ForeignKey('servicio.id'), nullable=True)
+    tipo = db.Column(db.String(20), nullable=False)  # 'entrada' o 'salida'
+    cantidad = db.Column(db.Integer, nullable=False)
+    fecha = db.Column(db.DateTime, default=datetime.utcnow)
+    motivo = db.Column(db.String(200))
+    referencia = db.Column(db.String(100))  # Número de factura o servicio relacionado
+    # Relaciones
+    servicio = db.relationship('Servicio', backref='movimientos_inventario')
 
 class Factura(db.Model):
     __tablename__ = 'factura'

@@ -16,15 +16,17 @@ from blueprints.configuracion import configuracion_bp
 from blueprints.dashboard import bp as dashboard_bp
 from blueprints.inventario import inventario_bp
 from blueprints.calendario import calendario_bp
+from blueprints.facturas import facturas_bp
+import os
 
 def create_app():
     app = Flask(__name__)
     
     # Configuración
     app.config['SECRET_KEY'] = 'tu_clave_secreta_aqui'  # Cambiar en producción
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///automanager.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///automanager.db'  # Usar SQLite para desarrollo
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['JWT_SECRET_KEY'] = 'tu_clave_secreta_aqui'  # Cambiar en producción
+    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'tu-clave-secreta-aqui')
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
     
     # Configurar logging
@@ -50,6 +52,7 @@ def create_app():
     app.register_blueprint(mecanicos_bp, url_prefix='/api/mecanicos')
     app.register_blueprint(inventario_bp, url_prefix='/api/inventario')
     app.register_blueprint(calendario_bp, url_prefix='/api/eventos')
+    app.register_blueprint(facturas_bp, url_prefix='/api/facturas')
     
     # Ruta de health check
     @app.route('/api/health')
@@ -90,7 +93,7 @@ def create_app():
     
     # Crear tablas si no existen
     with app.app_context():
-        # db.create_all()  # Comentamos esta línea para usar migraciones
+        db.create_all()  # Usar create_all para SQLite
         logger.info("Tablas verificadas correctamente")
     
     return app

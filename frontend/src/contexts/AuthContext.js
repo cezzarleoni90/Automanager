@@ -1,50 +1,39 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [token, setToken] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [user, setUser] = useState(() => {
+        const savedUser = localStorage.getItem('user');
+        return savedUser ? JSON.parse(savedUser) : null;
+    });
 
     useEffect(() => {
-        // Verificar si hay un token y usuario guardados
-        const storedToken = localStorage.getItem('token');
-        const storedUser = localStorage.getItem('user');
-
-        if (storedToken && storedUser) {
-            setToken(storedToken);
-            setUser(JSON.parse(storedUser));
+        if (user) {
+            localStorage.setItem('user', JSON.stringify(user));
+        } else {
+            localStorage.removeItem('user');
         }
-        setLoading(false);
-    }, []);
+    }, [user]);
 
-    const login = async (newToken, userData) => {
-        localStorage.setItem('token', newToken);
-        localStorage.setItem('user', JSON.stringify(userData));
-        setToken(newToken);
+    const login = (userData, token) => {
+        localStorage.setItem('token', token);
         setUser(userData);
     };
 
     const logout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        setToken(null);
         setUser(null);
     };
 
-    const value = {
-        user,
-        token,
-        loading,
-        login,
-        logout,
-        isAuthenticated: !!token
+    const isAuthenticated = () => {
+        return !!localStorage.getItem('token');
     };
 
     return (
-        <AuthContext.Provider value={value}>
-            {!loading && children}
+        <AuthContext.Provider value={{ user, login, logout, isAuthenticated }}>
+            {children}
         </AuthContext.Provider>
     );
 };
@@ -55,6 +44,4 @@ export const useAuth = () => {
         throw new Error('useAuth debe ser usado dentro de un AuthProvider');
     }
     return context;
-};
-
-export default AuthContext; 
+}; 

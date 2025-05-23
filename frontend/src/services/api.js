@@ -1,13 +1,37 @@
 import axios from 'axios';
+import config from '../config';
 
-export const API_URL = 'http://localhost:5000/api';
+const api = axios.create({
+  baseURL: 'http://localhost:5000/api',
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
 
-// Configurar el interceptor para incluir el token en cada petición
-axios.interceptors.request.use(
+// Interceptor para manejar errores
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response) {
+      // El servidor respondió con un código de estado fuera del rango 2xx
+      console.error('Error de respuesta:', error.response.data);
+    } else if (error.request) {
+      // La petición fue hecha pero no se recibió respuesta
+      console.error('Error de petición:', error.request);
+    } else {
+      // Algo sucedió al configurar la petición
+      console.error('Error:', error.message);
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Interceptor para agregar token de autenticación
+api.interceptors.request.use(
   config => {
     const token = localStorage.getItem('token');
     if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
@@ -15,6 +39,8 @@ axios.interceptors.request.use(
     return Promise.reject(error);
   }
 );
+
+export { api };
 
 // Función auxiliar para el manejo de errores de API
 const handleApiError = (error, functionName) => {
@@ -32,7 +58,7 @@ const handleApiError = (error, functionName) => {
 export const getServicios = async () => {
   try {
     console.log('API: Iniciando petición GET a servicios');
-    const response = await axios.get(`${API_URL}/servicios/`, {
+    const response = await api.get('/servicios/', {
       timeout: 10000 // Timeout de 10 segundos
     });
     console.log('API: Respuesta servicios recibida:', response.status);
@@ -45,7 +71,7 @@ export const getServicios = async () => {
 export const getServicio = async (id) => {
   try {
     console.log(`API: Obteniendo servicio ID ${id}`);
-    const response = await axios.get(`${API_URL}/servicios/${id}`, {
+    const response = await api.get(`/servicios/${id}`, {
       timeout: 8000
     });
     console.log(`API: Servicio ${id} recibido:`, response.status);
@@ -74,7 +100,7 @@ export const createServicio = async (data) => {
     
     console.log('API: Datos formateados para crear servicio:', servicioData);
     
-    const response = await axios.post(`${API_URL}/servicios/`, servicioData, {
+    const response = await api.post('/servicios/', servicioData, {
       timeout: 8000
     });
     console.log('API: Servicio creado:', response.status, response.data);
@@ -88,7 +114,7 @@ export const createServicio = async (data) => {
 export const updateServicio = async (id, data) => {
   try {
     console.log(`API: Actualizando servicio ID ${id}`, data);
-    const response = await axios.put(`${API_URL}/servicios/${id}`, data, {
+    const response = await api.put(`/servicios/${id}`, data, {
       timeout: 8000
     });
     console.log(`API: Servicio ${id} actualizado:`, response.status);
@@ -106,7 +132,7 @@ export const updateServicio = async (id, data) => {
 export const deleteServicio = async (id) => {
   try {
     console.log(`API: Eliminando servicio ${id}`);
-    const response = await axios.delete(`${API_URL}/servicios/${id}`, {
+    const response = await api.delete(`/servicios/${id}`, {
       timeout: 8000
     });
     console.log(`API: Servicio ${id} eliminado:`, response.status);
@@ -119,7 +145,7 @@ export const deleteServicio = async (id) => {
 export const asignarMecanico = async (servicioId, data) => {
   try {
     console.log(`API: Asignando mecánico al servicio ${servicioId}`, data);
-    const response = await axios.post(`${API_URL}/servicios/${servicioId}/asignar_mecanico`, data, {
+    const response = await api.post(`/servicios/${servicioId}/asignar_mecanico`, data, {
       timeout: 8000
     });
     console.log(`API: Mecánico asignado al servicio ${servicioId}:`, response.status);
@@ -132,7 +158,7 @@ export const asignarMecanico = async (servicioId, data) => {
 export const agregarRepuesto = async (servicioId, data) => {
   try {
     console.log(`API: Agregando repuesto al servicio ${servicioId}`, data);
-    const response = await axios.post(`${API_URL}/servicios/${servicioId}/repuestos`, data, {
+    const response = await api.post(`/servicios/${servicioId}/repuestos`, data, {
       timeout: 8000
     });
     console.log(`API: Repuesto agregado al servicio ${servicioId}:`, response.status);
@@ -145,7 +171,7 @@ export const agregarRepuesto = async (servicioId, data) => {
 export const eliminarRepuesto = async (servicioId, repuestoId) => {
   try {
     console.log(`API: Eliminando repuesto ${repuestoId} del servicio ${servicioId}`);
-    const response = await axios.delete(`${API_URL}/servicios/${servicioId}/repuestos/${repuestoId}`, {
+    const response = await api.delete(`/servicios/${servicioId}/repuestos/${repuestoId}`, {
       timeout: 8000
     });
     console.log(`API: Repuesto ${repuestoId} eliminado del servicio ${servicioId}:`, response.status);
@@ -158,7 +184,7 @@ export const eliminarRepuesto = async (servicioId, repuestoId) => {
 export const actualizarCantidadRepuesto = async (servicioId, repuestoId, cantidad) => {
   try {
     console.log(`API: Actualizando cantidad de repuesto ${repuestoId} en servicio ${servicioId}`, {cantidad});
-    const response = await axios.put(`${API_URL}/servicios/${servicioId}/repuestos/${repuestoId}`, {cantidad}, {
+    const response = await api.put(`/servicios/${servicioId}/repuestos/${repuestoId}`, {cantidad}, {
       timeout: 8000
     });
     console.log(`API: Cantidad de repuesto ${repuestoId} actualizada en servicio ${servicioId}:`, response.status);
@@ -171,7 +197,7 @@ export const actualizarCantidadRepuesto = async (servicioId, repuestoId, cantida
 export const obtenerRepuestos = async (servicioId) => {
   try {
     console.log(`API: Obteniendo repuestos del servicio ${servicioId}`);
-    const response = await axios.get(`${API_URL}/servicios/${servicioId}/repuestos`, {
+    const response = await api.get(`/servicios/${servicioId}/repuestos`, {
       timeout: 8000
     });
     console.log(`API: Repuestos del servicio ${servicioId} recibidos:`, response.status);
@@ -184,7 +210,7 @@ export const obtenerRepuestos = async (servicioId) => {
 export const cambiarEstado = async (servicioId, data) => {
   try {
     console.log(`API: Cambiando estado del servicio ${servicioId}`, data);
-    const response = await axios.post(`${API_URL}/servicios/${servicioId}/cambiar_estado`, data, {
+    const response = await api.post(`/servicios/${servicioId}/cambiar_estado`, data, {
       timeout: 8000
     });
     console.log(`API: Estado del servicio ${servicioId} cambiado:`, response.status);
@@ -197,7 +223,7 @@ export const cambiarEstado = async (servicioId, data) => {
 export const obtenerHistorial = async (servicioId) => {
   try {
     console.log(`API: Obteniendo historial del servicio ${servicioId}`);
-    const response = await axios.get(`${API_URL}/servicios/${servicioId}/historial`, {
+    const response = await api.get(`/servicios/${servicioId}/historial`, {
       timeout: 8000
     });
     console.log(`API: Historial del servicio ${servicioId} recibido:`, response.status);
@@ -210,7 +236,7 @@ export const obtenerHistorial = async (servicioId) => {
 export const obtenerEstados = async () => {
   try {
     console.log('API: Obteniendo estados de servicio');
-    const response = await axios.get(`${API_URL}/servicios/estados`, {
+    const response = await api.get('/servicios/estados', {
       timeout: 5000
     });
     console.log('API: Estados obtenidos:', response.status);
@@ -233,7 +259,7 @@ export const obtenerEstados = async () => {
 export const getMecanicos = async () => {
   try {
     console.log('API: Obteniendo lista de mecánicos');
-    const response = await axios.get(`${API_URL}/mecanicos/`, {
+    const response = await api.get('/mecanicos/', {
       timeout: 8000
     });
     console.log('API: Lista de mecánicos recibida:', response.status);
@@ -246,7 +272,7 @@ export const getMecanicos = async () => {
 export const getMecanico = async (id) => {
   try {
     console.log(`API: Obteniendo mecánico ${id}`);
-    const response = await axios.get(`${API_URL}/mecanicos/${id}`, {
+    const response = await api.get(`/mecanicos/${id}`, {
       timeout: 8000
     });
     console.log(`API: Mecánico ${id} recibido:`, response.status);
@@ -260,7 +286,7 @@ export const getMecanico = async (id) => {
 export const getVehiculos = async () => {
   try {
     console.log('API: Obteniendo lista de vehículos');
-    const response = await axios.get(`${API_URL}/vehiculos/`, {
+    const response = await api.get('/vehiculos/', {
       timeout: 8000
     });
     console.log('API: Lista de vehículos recibida:', response.status);
@@ -273,7 +299,7 @@ export const getVehiculos = async () => {
 export const getVehiculo = async (id) => {
   try {
     console.log(`API: Obteniendo vehículo ${id}`);
-    const response = await axios.get(`${API_URL}/vehiculos/${id}`, {
+    const response = await api.get(`/vehiculos/${id}`, {
       timeout: 8000
     });
     console.log(`API: Vehículo ${id} recibido:`, response.status);
@@ -287,7 +313,7 @@ export const getVehiculo = async (id) => {
 export const getRepuestos = async () => {
   try {
     console.log('API: Obteniendo lista de repuestos');
-    const response = await axios.get(`${API_URL}/inventario/repuestos`, {
+    const response = await api.get('/inventario/repuestos', {
       timeout: 8000
     });
     console.log('API: Lista de repuestos recibida:', response.status);
@@ -300,7 +326,7 @@ export const getRepuestos = async () => {
 export const getRepuesto = async (id) => {
   try {
     console.log(`API: Obteniendo repuesto ${id}`);
-    const response = await axios.get(`${API_URL}/inventario/repuestos/${id}`, {
+    const response = await api.get(`/inventario/repuestos/${id}`, {
       timeout: 8000
     });
     console.log(`API: Repuesto ${id} recibido:`, response.status);
@@ -314,7 +340,7 @@ export const getRepuesto = async (id) => {
 export const getClientes = async () => {
   try {
     console.log('API: Obteniendo lista de clientes');
-    const response = await axios.get(`${API_URL}/clientes`, {
+    const response = await api.get('/clientes', {
       timeout: 8000
     });
     console.log('API: Lista de clientes recibida:', response.status);
@@ -327,7 +353,7 @@ export const getClientes = async () => {
 export const getCliente = async (id) => {
   try {
     console.log(`API: Obteniendo cliente ${id}`);
-    const response = await axios.get(`${API_URL}/clientes/${id}`, {
+    const response = await api.get(`/clientes/${id}`, {
       timeout: 8000
     });
     console.log(`API: Cliente ${id} recibido:`, response.status);
@@ -340,7 +366,7 @@ export const getCliente = async (id) => {
 export const createCliente = async (data) => {
   try {
     console.log('API: Creando nuevo cliente', data);
-    const response = await axios.post(`${API_URL}/clientes`, data, {
+    const response = await api.post('/clientes', data, {
       timeout: 8000
     });
     console.log('API: Cliente creado:', response.status);
@@ -353,7 +379,7 @@ export const createCliente = async (data) => {
 export const updateCliente = async (id, data) => {
   try {
     console.log(`API: Actualizando cliente ${id}`, data);
-    const response = await axios.put(`${API_URL}/clientes/${id}`, data, {
+    const response = await api.put(`/clientes/${id}`, data, {
       timeout: 8000
     });
     console.log(`API: Cliente ${id} actualizado:`, response.status);
@@ -366,7 +392,7 @@ export const updateCliente = async (id, data) => {
 export const deleteCliente = async (id) => {
   try {
     console.log(`API: Eliminando cliente ${id}`);
-    const response = await axios.delete(`${API_URL}/clientes/${id}`, {
+    const response = await api.delete(`/clientes/${id}`, {
       timeout: 8000
     });
     console.log(`API: Cliente ${id} eliminado:`, response.status);
@@ -380,7 +406,7 @@ export const deleteCliente = async (id) => {
 export const getEstadisticas = async () => {
   try {
     console.log('API: Obteniendo estadísticas del dashboard');
-    const response = await axios.get(`${API_URL}/dashboard`, {
+    const response = await api.get('/dashboard', {
       timeout: 8000
     });
     console.log('API: Estadísticas recibidas:', response.status);
@@ -394,10 +420,8 @@ export const getEstadisticas = async () => {
 export const login = async (credentials) => {
   try {
     console.log('API: Iniciando sesión');
-    const response = await axios.post(`${API_URL}/auth/login`, credentials, {
-      timeout: 8000
-    });
-    console.log('API: Sesión iniciada:', response.status);
+    const response = await api.post('/auth/login', credentials);
+    console.log('API: Login exitoso');
     return response.data;
   } catch (error) {
     return handleApiError(error, 'login');
@@ -407,7 +431,7 @@ export const login = async (credentials) => {
 export const register = async (userData) => {
   try {
     console.log('API: Registrando nuevo usuario');
-    const response = await axios.post(`${API_URL}/auth/register`, userData, {
+    const response = await api.post('/auth/register', userData, {
       timeout: 8000
     });
     console.log('API: Usuario registrado:', response.status);
@@ -420,7 +444,7 @@ export const register = async (userData) => {
 export const logout = async () => {
   try {
     console.log('API: Cerrando sesión');
-    const response = await axios.post(`${API_URL}/auth/logout`, {}, {
+    const response = await api.post('/auth/logout', {}, {
       timeout: 8000
     });
     console.log('API: Sesión cerrada:', response.status);
@@ -434,7 +458,7 @@ export const logout = async () => {
 export const createVehiculo = async (data) => {
   try {
     console.log('API: Creando nuevo vehículo', data);
-    const response = await axios.post(`${API_URL}/vehiculos`, data, {
+    const response = await api.post('/vehiculos', data, {
       timeout: 8000
     });
     console.log('API: Vehículo creado:', response.status);
@@ -447,7 +471,7 @@ export const createVehiculo = async (data) => {
 export const updateVehiculo = async (id, data) => {
   try {
     console.log(`API: Actualizando vehículo ${id}`, data);
-    const response = await axios.put(`${API_URL}/vehiculos/${id}`, data, {
+    const response = await api.put(`/vehiculos/${id}`, data, {
       timeout: 8000
     });
     console.log(`API: Vehículo ${id} actualizado:`, response.status);
@@ -460,7 +484,7 @@ export const updateVehiculo = async (id, data) => {
 export const deleteVehiculo = async (id) => {
   try {
     console.log(`API: Eliminando vehículo ${id}`);
-    const response = await axios.delete(`${API_URL}/vehiculos/${id}`, {
+    const response = await api.delete(`/vehiculos/${id}`, {
       timeout: 8000
     });
     console.log(`API: Vehículo ${id} eliminado:`, response.status);
@@ -489,7 +513,7 @@ export const createVehiculoCliente = async (clienteId, data) => {
       ultimo_servicio: data.ultimo_servicio || null
     };
 
-    const response = await axios.post(`${API_URL}/clientes/${clienteId}/vehiculos`, vehiculoData, {
+    const response = await api.post(`/clientes/${clienteId}/vehiculos`, vehiculoData, {
       timeout: 8000
     });
     console.log('API: Vehículo creado:', response.status);

@@ -1,56 +1,70 @@
 from app import create_app
-from models import db, Repuesto
+from models import db, Inventario
+import random
 
-app = create_app()
+def create_test_data():
+    app = create_app()
+    with app.app_context():
+        # Crear algunos repuestos de prueba
+        repuestos = [
+            {
+                'nombre': 'Aceite de Motor 5W-30',
+                'descripcion': 'Aceite sintético para motor',
+                'stock': 15,
+                'stock_minimo': 5,
+                'precio_compra': 25.00,
+                'precio_venta': 35.00,
+                'categoria': 'Lubricantes'
+            },
+            {
+                'nombre': 'Filtro de Aceite',
+                'descripcion': 'Filtro de aceite universal',
+                'stock': 8,
+                'stock_minimo': 10,
+                'precio_compra': 8.00,
+                'precio_venta': 15.00,
+                'categoria': 'Filtros'
+            },
+            {
+                'nombre': 'Pastillas de Freno',
+                'descripcion': 'Pastillas de freno cerámicas',
+                'stock': 4,
+                'stock_minimo': 6,
+                'precio_compra': 30.00,
+                'precio_venta': 45.00,
+                'categoria': 'Frenos'
+            },
+            {
+                'nombre': 'Bujías NGK',
+                'descripcion': 'Bujías de iridio',
+                'stock': 20,
+                'stock_minimo': 15,
+                'precio_compra': 12.00,
+                'precio_venta': 20.00,
+                'categoria': 'Motor'
+            },
+            {
+                'nombre': 'Líquido de Frenos DOT4',
+                'descripcion': 'Líquido de frenos sintético',
+                'stock': 3,
+                'stock_minimo': 5,
+                'precio_compra': 15.00,
+                'precio_venta': 25.00,
+                'categoria': 'Frenos'
+            }
+        ]
+        
+        # Insertar los repuestos en la base de datos
+        for repuesto in repuestos:
+            item = Inventario(**repuesto)
+            db.session.add(item)
+        
+        try:
+            db.session.commit()
+            print("Datos de prueba creados exitosamente")
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error al crear datos de prueba: {str(e)}")
 
-with app.app_context():
-    # Crear repuestos de prueba
-    repuestos = [
-        {
-            'codigo': 'REP001',
-            'nombre': 'Filtro de Aceite',
-            'categoria': 'Filtros',
-            'precio_compra': 15.00,
-            'precio_venta': 25.00,
-            'stock': 50,
-            'stock_minimo': 10,
-            'descripcion': 'Filtro de aceite universal',
-            'estado': 'activo'
-        },
-        {
-            'codigo': 'REP002',
-            'nombre': 'Pastillas de Freno',
-            'categoria': 'Frenos',
-            'precio_compra': 45.00,
-            'precio_venta': 75.00,
-            'stock': 30,
-            'stock_minimo': 5,
-            'descripcion': 'Pastillas de freno delanteras',
-            'estado': 'activo'
-        },
-        {
-            'codigo': 'REP003',
-            'nombre': 'Bujía',
-            'categoria': 'Motor',
-            'precio_compra': 8.00,
-            'precio_venta': 15.00,
-            'stock': 100,
-            'stock_minimo': 20,
-            'descripcion': 'Bujía de encendido',
-            'estado': 'activo'
-        }
-    ]
-    
-    for rep_data in repuestos:
-        # Verificar si ya existe
-        existing = Repuesto.query.filter_by(codigo=rep_data['codigo']).first()
-        if not existing:
-            repuesto = Repuesto(**rep_data)
-            db.session.add(repuesto)
-    
-    db.session.commit()
-    print("Repuestos de prueba creados exitosamente")
-    
-    # Verificar que se crearon
-    repuestos_count = Repuesto.query.count()
-    print(f"Total de repuestos en la base de datos: {repuestos_count}") 
+if __name__ == '__main__':
+    create_test_data() 

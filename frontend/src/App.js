@@ -1,97 +1,60 @@
 import React from 'react';
-import { 
-  Navigate,
-  createBrowserRouter,
-  RouterProvider
-} from 'react-router-dom';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from 'react-query';
+import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { AuthProvider } from './context/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/material';
-
-// Componentes
+import theme from './theme';
 import Layout from './components/Layout';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Clientes from './pages/Clientes';
-import Vehiculos from './pages/Vehiculos';
-import Servicios from './pages/Servicios';
-import Inventario from './pages/Inventario';
-import Mecanicos from './pages/Mecanicos';
-import Calendario from './pages/Calendario';
-import Facturacion from './pages/Facturacion';
-import Configuracion from './pages/Configuracion';
-import Perfil from './pages/Perfil';
+import ProtectedRoute from './components/ProtectedRoute';
+import Login from './pages/Auth/Login';
+import Dashboard from './pages/dashboard/Dashboard';
+import Clientes from './pages/clientes/Clientes';
+import Vehiculos from './pages/vehiculos/Vehiculos';
+import Servicios from './pages/servicios/Servicios';
+import Mecanicos from './pages/mecanicos/Mecanicos';
+import Calendario from './pages/calendario/Calendario';
+import Facturacion from './pages/facturacion/Facturacion';
+import Configuracion from './pages/configuracion/Configuracion';
+import Perfil from './pages/perfil/Perfil';
+import Inventario from './pages/inventario/Inventario';
 
-const theme = createTheme({
-  palette: {
-    mode: 'light',
-    primary: {
-      main: '#1976d2',
+// Crear una instancia de QueryClient
+const queryClient = new QueryClient({
+    defaultOptions: {
+        queries: {
+            refetchOnWindowFocus: false,
+            retry: 1,
+            staleTime: 5 * 60 * 1000, // 5 minutos
+        },
     },
-    secondary: {
-      main: '#dc004e',
-    },
-  },
 });
 
-function toDatetimeLocal(dateString) {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  const pad = n => n < 10 ? '0' + n : n;
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function AppRouter() {
-  const router = createBrowserRouter([
-    {
-      path: '/login',
-      element: <Login />
-    },
-    {
-      path: '/',
-      element: <Navigate to="/dashboard" replace />
-    },
-    {
-      path: '/',
-      element: (
-        <ProtectedRoute>
-          <Layout />
-        </ProtectedRoute>
-      ),
-      children: [
-        { path: 'dashboard', element: <Dashboard /> },
-        { path: 'clientes', element: <Clientes /> },
-        { path: 'vehiculos', element: <Vehiculos /> },
-        { path: 'servicios', element: <Servicios /> },
-        { path: 'inventario', element: <Inventario /> },
-        { path: 'mecanicos', element: <Mecanicos /> },
-        { path: 'calendario', element: <Calendario /> },
-        { path: 'facturacion', element: <Facturacion /> },
-        { path: 'configuracion', element: <Configuracion /> },
-        { path: 'perfil', element: <Perfil /> }
-      ]
-    }
-  ], {
-    future: {
-      v7_startTransition: true,
-      v7_relativeSplatPath: true
-    }
-  });
-
-  return <RouterProvider router={router} />;
-}
-
 function App() {
-  return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <AuthProvider>
-        <AppRouter />
-      </AuthProvider>
-    </ThemeProvider>
-  );
+    return (
+        <QueryClientProvider client={queryClient}>
+            <ThemeProvider theme={theme}>
+                <CssBaseline />
+                <Router>
+                    <Routes>
+                        <Route path="/login" element={<Login />} />
+                        <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                            <Route path="/" element={<Dashboard />} />
+                            <Route path="/clientes" element={<Clientes />} />
+                            <Route path="/vehiculos" element={<Vehiculos />} />
+                            <Route path="/servicios" element={<Servicios />} />
+                            <Route path="/mecanicos" element={<Mecanicos />} />
+                            <Route path="/calendario" element={<Calendario />} />
+                            <Route path="/facturacion" element={<Facturacion />} />
+                            <Route path="/configuracion" element={<Configuracion />} />
+                            <Route path="/perfil" element={<Perfil />} />
+                            <Route path="/inventario" element={<Inventario />} />
+                        </Route>
+                        <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                </Router>
+            </ThemeProvider>
+        </QueryClientProvider>
+    );
 }
 
 export default App; 
