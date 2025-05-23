@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import Configuracion, db
+from backend.models import Configuracion
+from backend.extensions import db
 import os
 from werkzeug.utils import secure_filename
 

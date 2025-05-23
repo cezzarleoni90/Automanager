@@ -20,7 +20,7 @@ function toDatetimeLocal(dateString) {
     const pad = n => n < 10 ? '0' + n : n;
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
-
+/// Nota: el calendario se adapta a la resolucion de la pantalla
 const neonBlue = '#00eaff';
 const glassBg = 'linear-gradient(135deg, rgba(30,34,45,0.95) 60%, rgba(0,234,255,0.15) 100%)';
 const modalBg = 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)';

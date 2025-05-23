@@ -1,8 +1,16 @@
+<<<<<<< HEAD
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from models import Cliente, Vehiculo, Servicio, Mecanico, Factura, Inventario
 from extensions import db
 from sqlalchemy import func, and_
+=======
+from flask import Blueprint, jsonify, request
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from backend.models import Cliente, Vehiculo, Servicio, Mecanico, Factura
+from backend.extensions import db
+from sqlalchemy import func
+>>>>>>> cc4bc33f90ff4f4cfed9d9b715b5818b6f50788d
 from datetime import datetime, timedelta
 
 bp = Blueprint('dashboard', __name__)

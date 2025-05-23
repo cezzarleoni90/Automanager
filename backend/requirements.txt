@@ -1,18 +1,48 @@
+# Dependencias principales
 Flask==2.3.3
 Flask-SQLAlchemy==3.1.1
-Flask-JWT-Extended==4.5.3
-Flask-CORS==4.0.0
-Werkzeug==2.3.7
-SQLAlchemy==2.0.23
-python-dotenv==1.0.0
-gunicorn==21.2.0
-psycopg2-binary==2.9.9
+Flask-JWT-Extended==4.6.0
 Flask-Migrate==4.0.5
-Jinja2==3.1.2
-itsdangerous==2.1.2
-click==8.1.7
-alembic==1.12.1
+Flask-Cors==4.0.0
+Flask-Caching==2.1.0
+Flask-RESTX==1.1.0
+redis==5.0.1
+celery==5.3.6
+gunicorn==21.2.0
+python-dotenv==1.0.0
+psycopg2-binary==2.9.9
+SQLAlchemy==2.0.23
+Werkzeug==3.0.1
+PyJWT==2.8.0
+bcrypt==4.0.1
+requests==2.31.0
+boto3==1.29.3
+botocore>=1.32.3,<1.33.0
+
+# Dependencias de desarrollo
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-flask==1.3.0
+black==23.11.0
+flake8==6.1.0
+mypy==1.7.1
+
+# Dependencias de documentación
+Sphinx==7.2.6
+sphinx-rtd-theme==1.3.0
+flask-swagger==0.2.14
+flask-swagger-ui==4.11.1
+
+# Dependencias de monitoreo
+prometheus-client==0.19.0
+
+# Dependencias de tareas asíncronas
+celery[redis]==5.3.6
+flower==2.0.1
+
+# Dependencias de backup
 python-dateutil==2.8.2
+<<<<<<< HEAD
 pytz==2023.3
 cryptography==42.0.5
 
@@ -21,3 +51,21 @@ pytest==7.4.3
 pytest-cov==4.1.0
 pytest-flask==1.3.0
 coverage==7.3.2 
+=======
+
+# Dependencias de producción
+gunicorn==21.2.0
+gevent==23.9.1
+
+# Documentación
+apispec==6.3.0
+apispec-webframeworks==0.5.2
+
+# Desarrollo
+isort==5.12.0
+
+# Dependencias de seguridad
+cryptography==41.0.5
+python-jose==3.3.0
+passlib==1.7.4 
+>>>>>>> cc4bc33f90ff4f4cfed9d9b715b5818b6f50788d
